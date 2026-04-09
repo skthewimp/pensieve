@@ -1,0 +1,27 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+build/
+
+# SPM
+.build/
+.swiftpm/
+Package.resolved
+iOS/SecondBrain.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Wiki raw notes (personal content, not code)
+wiki/raw/*.md
+
+# Obsidian
+wiki/.obsidian/
