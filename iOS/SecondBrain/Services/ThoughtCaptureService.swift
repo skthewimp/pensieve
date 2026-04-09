@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 /// Orchestrates the full capture pipeline: record → transcribe → process → save.
 /// This is the main service the UI talks to.
@@ -8,6 +9,10 @@ class ThoughtCaptureService: ObservableObject {
     @Published var currentNote: ThoughtNote?
     @Published var isProcessing = false
 
+    // Forwarded from audioRecorder so SwiftUI can observe them directly
+    @Published var isRecording = false
+    @Published var recordingDuration: TimeInterval = 0
+
     let audioRecorder = AudioRecorderService()
     let transcriptionService = TranscriptionService()
     let storageService = ObsidianStorageService()
@@ -15,6 +20,7 @@ class ThoughtCaptureService: ObservableObject {
     @Published private(set) var isConfigured = false
     private var claudeService: ClaudeProcessingService?
     private var currentAudioURL: URL?
+    private var cancellables = Set<AnyCancellable>()
 
     private let metadataURL: URL
 
@@ -22,6 +28,14 @@ class ThoughtCaptureService: ObservableObject {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         self.metadataURL = documents.appendingPathComponent("Recordings/notes.json")
         loadNotes()
+
+        // Forward audioRecorder state changes to this object so SwiftUI sees them
+        audioRecorder.$isRecording
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$isRecording)
+        audioRecorder.$recordingDuration
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$recordingDuration)
     }
 
     /// Set the API key (called from settings)

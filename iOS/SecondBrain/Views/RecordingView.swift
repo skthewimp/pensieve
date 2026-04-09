@@ -4,22 +4,13 @@ struct RecordingView: View {
     @EnvironmentObject var captureService: ThoughtCaptureService
     @State private var permissionGranted = false
     @State private var showPermissionAlert = false
-    @State private var isHolding = false
-
-    var isRecording: Bool {
-        captureService.audioRecorder.isRecording
-    }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             // Status text
-            if isRecording {
-                Text(formatDuration(captureService.audioRecorder.recordingDuration))
-                    .font(.system(size: 40, weight: .light, design: .monospaced))
-                    .foregroundColor(.red)
-
-                Text("Recording...")
-                    .font(.caption)
+            if captureService.isRecording {
+                Text(formatDuration(captureService.recordingDuration))
+                    .font(.system(size: 48, weight: .light, design: .monospaced))
                     .foregroundColor(.red)
             } else if captureService.isProcessing {
                 if let note = captureService.notes.first {
@@ -36,68 +27,38 @@ struct RecordingView: View {
                     .foregroundColor(.secondary)
             }
 
-            // Two recording modes
-            if !isRecording {
-                // Hold to record button
-                ZStack {
-                    Circle()
-                        .fill(isHolding ? Color.red : Color.indigo)
-                        .frame(width: 80, height: 80)
-                        .shadow(radius: 6)
-                        .scaleEffect(isHolding ? 1.1 : 1.0)
-                        .animation(.easeInOut(duration: 0.2), value: isHolding)
-
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 28))
-                        .foregroundColor(.white)
+            // Single button: Start or Stop
+            if captureService.isRecording {
+                Button(action: {
+                    captureService.stopRecording()
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.system(size: 22))
+                        Text("Stop Recording")
+                            .font(.body.weight(.semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 14)
+                    .background(Color.red)
+                    .cornerRadius(30)
                 }
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.2)
-                        .onEnded { _ in
-                            startRecordingWithPermission()
-                            isHolding = true
-                        }
-                        .sequenced(before: DragGesture(minimumDistance: 0)
-                            .onEnded { _ in
-                                if isRecording {
-                                    captureService.stopRecording()
-                                    isHolding = false
-                                }
-                            }
-                        )
-                )
-                .disabled(captureService.isProcessing || !captureService.isConfigured)
-                .opacity(captureService.isConfigured ? 1.0 : 0.5)
-
-                Text("Hold to record")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                // OR divider
-                HStack {
-                    Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
-                    Text("or")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Rectangle().fill(Color.secondary.opacity(0.3)).frame(height: 1)
-                }
-                .padding(.horizontal, 40)
-
-                // Tap start / stop button
+            } else {
                 Button(action: {
                     startRecordingWithPermission()
                 }) {
                     HStack(spacing: 8) {
-                        Image(systemName: "record.circle")
-                            .font(.system(size: 20))
+                        Image(systemName: "mic.circle.fill")
+                            .font(.system(size: 22))
                         Text("Start Recording")
-                            .font(.subheadline.weight(.medium))
+                            .font(.body.weight(.semibold))
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 14)
                     .background(Color.indigo)
-                    .cornerRadius(25)
+                    .cornerRadius(30)
                 }
                 .disabled(captureService.isProcessing || !captureService.isConfigured)
                 .opacity(captureService.isConfigured ? 1.0 : 0.5)
@@ -107,33 +68,10 @@ struct RecordingView: View {
                         .font(.caption)
                         .foregroundColor(.orange)
                 }
-            } else {
-                // Currently recording - show stop button
-                Button(action: {
-                    captureService.stopRecording()
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 80, height: 80)
-                            .shadow(radius: 6)
-
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.white)
-                            .frame(width: 26, height: 26)
-                    }
-                }
-                .buttonStyle(.plain)
-                .scaleEffect(1.05)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isRecording)
-
-                Text("Tap to stop")
-                    .font(.caption)
-                    .foregroundColor(.red)
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 16)
+        .padding(.vertical, 20)
         .background(Color(.systemGroupedBackground))
         .alert("Microphone Access Required", isPresented: $showPermissionAlert) {
             Button("OK") {}
