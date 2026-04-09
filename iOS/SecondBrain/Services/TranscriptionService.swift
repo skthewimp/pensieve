@@ -12,13 +12,17 @@ class TranscriptionService: ObservableObject {
     /// Uses "base" model for balance of speed and accuracy on iPhone.
     func loadModel() async {
         do {
-            loadingProgress = "Loading Whisper model..."
-            whisperKit = try await WhisperKit(model: "base")
-            isModelLoaded = true
-            loadingProgress = "Ready"
+            await MainActor.run { loadingProgress = "Downloading model..." }
+            whisperKit = try await WhisperKit(
+                WhisperKitConfig(model: "openai_whisper-base", verbose: true, logLevel: .debug)
+            )
+            await MainActor.run {
+                isModelLoaded = true
+                loadingProgress = "Ready"
+            }
             print("WhisperKit model loaded")
         } catch {
-            loadingProgress = "Failed to load model"
+            await MainActor.run { loadingProgress = "Failed: \(error.localizedDescription)" }
             print("Failed to load WhisperKit: \(error)")
         }
     }
