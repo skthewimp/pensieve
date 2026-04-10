@@ -1,0 +1,174 @@
+import Foundation
+
+public struct VaultWriter {
+    public let vaultURL: URL
+    public init(vaultURL: URL) { self.vaultURL = vaultURL }
+
+    private var wikiDir: URL { vaultURL.appendingPathComponent("wiki") }
+    private var themesDir: URL { wikiDir.appendingPathComponent("themes") }
+    private var logFile: URL { wikiDir.appendingPathComponent("log.md") }
+    private var timelineFile: URL { wikiDir.appendingPathComponent("timeline.md") }
+    private var contradictionsFile: URL { wikiDir.appendingPathComponent("tensions/contradictions.md") }
+    private var indexFile: URL { wikiDir.appendingPathComponent("index.md") }
+
+    public func apply(patch: IngestionPatch, notes: [RawNote]) throws {
+        try FileManager.default.createDirectory(at: themesDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: contradictionsFile.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        try appendLogEntries(patch.logEntries, notes: notes)
+        try prependTimelineEntries(patch.timelineEntries)
+        for update in patch.themeUpdates { try applyThemeUpdate(update) }
+        for new in patch.newThemes { try writeNewTheme(new) }
+        if let appendText = patch.contradictionsAppend, !appendText.isEmpty {
+            try appendToContradictions(appendText)
+        }
+        if let newIndex = patch.indexRewrite, !newIndex.isEmpty {
+            try newIndex.write(to: indexFile, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func appendLogEntries(_ entries: [IngestionPatch.LogEntry], notes: [RawNote]) throws {
+        guard !entries.isEmpty else { return }
+        var existing = (try? String(contentsOf: logFile, encoding: .utf8)) ?? ""
+        if existing.isEmpty {
+            existing = "---\ntitle: Ingestion Log\ntype: log\n---\n\n# Ingestion Log\n\n"
+        }
+
+        let byDate = Dictionary(grouping: entries) { entry -> String in
+            String(entry.noteId.prefix(10))
+        }
+
+        for date in byDate.keys.sorted(by: >) {
+            let items = byDate[date]!.sorted { $0.noteId > $1.noteId }
+            let header = "## \(date)"
+            var lines = items.map { "- **\($0.noteId)** — \($0.summary)" }.joined(separator: "\n")
+            lines += "\n"
+
+            if let headerRange = existing.range(of: header) {
+                let insertAt = existing.index(after: headerRange.upperBound)
+                existing.insert(contentsOf: "\n" + lines, at: insertAt)
+            } else {
+                let insertAt = existing.range(of: "# Ingestion Log\n")?.upperBound ?? existing.endIndex
+                existing.insert(contentsOf: "\n\(header)\n\n\(lines)", at: insertAt)
+            }
+        }
+
+        try existing.write(to: logFile, atomically: true, encoding: .utf8)
+    }
+
+    private func prependTimelineEntries(_ entries: [String]) throws {
+        guard !entries.isEmpty else { return }
+        var existing = (try? String(contentsOf: timelineFile, encoding: .utf8)) ?? ""
+        if existing.isEmpty {
+            existing = "---\ntitle: Timeline\ntype: timeline\n---\n\n# Timeline\n\n"
+        }
+
+        let sorted = entries.sorted(by: >)
+        let insertion = sorted.joined(separator: "\n") + "\n"
+
+        if let headerRange = existing.range(of: "# Timeline\n") {
+            existing.insert(contentsOf: "\n" + insertion, at: headerRange.upperBound)
+        } else {
+            existing += "\n" + insertion
+        }
+
+        try existing.write(to: timelineFile, atomically: true, encoding: .utf8)
+    }
+
+    private func applyThemeUpdate(_ update: IngestionPatch.ThemeUpdate) throws {
+        let file = themesDir.appendingPathComponent("\(update.theme).md")
+        guard var content = try? String(contentsOf: file, encoding: .utf8) else { return }
+
+        content = bumpFrontmatter(content, sourceCountDelta: update.sourceCountDelta)
+
+        if let newState = update.currentState, !newState.isEmpty {
+            content = replaceSection(content, heading: "## Current State", newBody: newState)
+        }
+
+        content = appendToSection(content, heading: "## Evolution", appendBody: update.evolutionAppend)
+
+        try content.write(to: file, atomically: true, encoding: .utf8)
+    }
+
+    private func writeNewTheme(_ new: IngestionPatch.NewTheme) throws {
+        let file = themesDir.appendingPathComponent("\(new.name).md")
+        try new.fullContent.write(to: file, atomically: true, encoding: .utf8)
+    }
+
+    private func appendToContradictions(_ text: String) throws {
+        var existing = (try? String(contentsOf: contradictionsFile, encoding: .utf8)) ?? ""
+        if existing.isEmpty {
+            existing = "---\ntitle: Contradictions\ntype: tension\n---\n\n# Contradictions\n"
+        }
+        if !existing.hasSuffix("\n") { existing += "\n" }
+        existing += text.hasPrefix("\n") ? text : "\n" + text
+        try existing.write(to: contradictionsFile, atomically: true, encoding: .utf8)
+    }
+
+    private func bumpFrontmatter(_ content: String, sourceCountDelta: Int) -> String {
+        guard content.hasPrefix("---\n"),
+              let end = content.range(of: "\n---\n", range: content.index(content.startIndex, offsetBy: 4)..<content.endIndex)
+        else { return content }
+
+        var fm = String(content[content.index(content.startIndex, offsetBy: 4)..<end.lowerBound])
+        let today = Self.todayString()
+
+        fm = fm.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            let s = String(line)
+            if s.hasPrefix("last_updated:") { return "last_updated: \(today)" }
+            if s.hasPrefix("source_count:") {
+                let current = Int(s.replacingOccurrences(of: "source_count:", with: "")
+                    .trimmingCharacters(in: .whitespaces)) ?? 0
+                return "source_count: \(current + sourceCountDelta)"
+            }
+            return s
+        }.joined(separator: "\n")
+
+        return "---\n\(fm)\n---\n" + content[end.upperBound...]
+    }
+
+    private func replaceSection(_ content: String, heading: String, newBody: String) -> String {
+        guard let headingRange = content.range(of: heading) else { return content }
+        let bodyStart = content.index(after: headingRange.upperBound)
+        let nextHeadingRange = content.range(
+            of: "\n## ", range: bodyStart..<content.endIndex
+        )
+        let bodyEnd = nextHeadingRange?.lowerBound ?? content.endIndex
+
+        var result = String(content[..<headingRange.upperBound])
+        result += "\n\n\(newBody.trimmingCharacters(in: .whitespacesAndNewlines))\n"
+        if bodyEnd < content.endIndex {
+            result += content[bodyEnd...]
+        }
+        return result
+    }
+
+    private func appendToSection(_ content: String, heading: String, appendBody: String) -> String {
+        guard let headingRange = content.range(of: heading) else {
+            return content + "\n\n" + heading + "\n\n" + appendBody + "\n"
+        }
+        let nextHeadingRange = content.range(
+            of: "\n## ", range: headingRange.upperBound..<content.endIndex
+        )
+        let insertAt = nextHeadingRange?.lowerBound ?? content.endIndex
+
+        var result = String(content[..<insertAt])
+        if !result.hasSuffix("\n") { result += "\n" }
+        if !result.hasSuffix("\n\n") { result += "\n" }
+        result += appendBody.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+        if insertAt < content.endIndex {
+            result += content[insertAt...]
+        }
+        return result
+    }
+
+    private static func todayString() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone.current
+        return f.string(from: Date())
+    }
+}
