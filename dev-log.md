@@ -158,11 +158,100 @@ serviceB.$someProperty
 
 This came up three times in this project. If I add more observable state to child services, I need to forward it.
 
+### Session 4 (2026-04-10) — Scheduler fix and Swift ingestion rewrite
+
+**Prompt:** "did the daily script run?"
+
+It had not. `cron` fired at 10:17 as scheduled but the script bailed with `Operation not permitted`. Root cause: macOS TCC protects `~/Documents/`, and the `cron` daemon has no Full Disk Access, so it could not even execute `scripts/ingest.sh`.
+
+Switched from cron to a launchd user agent (`~/Library/LaunchAgents/com.karthikshashidhar.pensieve.ingest.plist`). Same error. Turned out the script file itself lived under `~/Documents/`, which also requires FDA for any interpreter to read. Moved a copy of the script to `~/.local/bin/pensieve-ingest.sh` and pointed launchd there. Got past the script-read error but then the script itself failed to enumerate `~/Library/Mobile Documents/iCloud~md~obsidian/.../raw/` — iCloud Drive is a separately TCC-protected location and launchd-spawned bash has no grant.
+
+**Prompt:** "is the wiki prepared with the existing notes or not?"
+
+Checked `wiki/log.md` vs `raw/`. Only 1 of 10 notes had been ingested (`2026-04-09_1154`, from the manual test on session 3). The other 9 had been sitting unprocessed. Since the current shell (launched from Terminal.app, which has FDA) could still read the vault, ran the existing `ingest.sh` manually from the session to catch up the backlog. Claude Code agentically ingested 9 notes, created 4 new theme pages (relationships, mental-health, self-awareness, job-search), updated 4 existing, and flagged 2 contradictions.
+
+**Prompt:** "how much will it cost? estimate based on today's run. assume there will be ~25 notes a day"
+
+Parsed the Claude Code session log at `~/.claude/projects/-Users-Karthik-Library-Mobile-Documents-iCloud-md-obsidian-Documents-SecondBrain/*.jsonl` to get actual token counts. Today's 9-note agentic run: 91K output tokens, 1.38M cache_read, 390K cache_write, 83 input — **$3.25 total, ~$0.36/note**. Extrapolated to 25 notes/day: **~$150-210/month, rising as the wiki grows**.
+
+**Prompt:** "no way too expensive"
+
+Diagnosed the cost: the agentic loop (Claude Code making Read/Edit/Write tool calls) round-trips the full wiki state on every tool call, which balloons cache-write and output tokens. A direct API call that takes the raw notes + current wiki state as input and returns a structured JSON patch in one shot should be 10-20x cheaper.
+
+Recommended: rewrite as a direct API call. User picked the single-stage approach and asked for it in Swift so it can later be dropped into the iOS app.
+
+**Implementation** — Swift Package at `scripts/pensieve-ingest/`:
+
+```
+scripts/pensieve-ingest/
+  Package.swift                     # SPM manifest, macOS 13+
+  Sources/
+    PensieveIngest/main.swift       # CLI entry point
+    PensieveIngestCore/
+      IngestEngine.swift            # Orchestrates read -> API -> write
+      ClaudeClient.swift            # Direct Anthropic API client
+      VaultReader.swift             # Reads raw/ + selected wiki files
+      VaultWriter.swift             # Applies IngestionPatch
+      Prompts.swift                 # System prompt + user prompt builder
+      Models.swift                  # RawNote, IngestionPatch, stats
+```
+
+Key design choice: `PensieveIngestCore` is a separate library target with zero platform-specific deps so it can be imported into the iOS app unchanged later. The CLI target is a thin wrapper that parses args, reads `ANTHROPIC_API_KEY` from the environment, and calls into the core.
+
+**IngestionPatch schema** — hybrid: prepend for theme Evolution sections, append for log/timeline/contradictions, full rewrite for index:
+
+```json
+{
+  "logEntries": [{"noteId": "...", "summary": "..."}],
+  "timelineEntries": ["- **2026-04-10 13:17** — ..."],
+  "themeUpdates": [
+    {"theme": "career", "currentState": "...", "evolutionAppend": "### 2026-04-10...", "sourceCountDelta": 1}
+  ],
+  "newThemes": [{"name": "decision-making", "fullContent": "---\ntitle: ..."}],
+  "contradictionsAppend": "\n## 2026-04-10 Control vs. flow\n...",
+  "indexRewrite": null
+}
+```
+
+**Gotchas encountered:**
+
+1. **URLSession silently drops headers with trailing whitespace.** The `.env` file's `ANTHROPIC_API_KEY` value had a trailing newline that the shell extraction preserved. `req.addValue("sk-ant-...\n", forHTTPHeaderField: "x-api-key")` succeeds without error but the header never leaves the client, because HTTP header values cannot contain newlines. Anthropic responds with `"x-api-key header is required"` as if the header wasn't set at all. Debugging was hard because `req.allHTTPHeaderFields` showed the header missing entirely — URLSession had silently stripped it. Fix: `.trimmingCharacters(in: .whitespacesAndNewlines)` in the `ClaudeClient` initializer, defensive against any source of the key.
+
+2. **Default URLSession timeout is 60s.** A 10-note Sonnet call takes ~90s. Bumped `timeoutIntervalForRequest` to 600 and `timeoutIntervalForResource` to 900 on a custom `URLSessionConfiguration.ephemeral`.
+
+3. **VaultWriter initial bug: appending new Evolution entries at the bottom of the section instead of the top.** The convention (set by previous agentic runs) is reverse-chronological — newest at top. Initial implementation found the next `## ` heading and inserted just before it. Fixed by prepending right after `## Evolution`. Caught during verification by reading `career.md` after a test run and noticing the new 2026-04-10 entry was below the older 2026-04-09 entries.
+
+**Verification** — ran the new tool against the live vault twice before deploying:
+
+1. **Dry run** (`--dry-run` flag) — temporarily reverted `log.md` to pre-ingest state so all 10 notes looked unprocessed, ran the tool, inspected patch output and cost. Result: **$0.11 for 10 notes, 93s**, vs. the agentic $3.25 for 9 notes. Restored `log.md` from backup.
+
+2. **Real run** on one actual new note (`2026-04-10_1317`, which the user had recorded on their phone during the session and synced via iCloud). Backed up the entire `wiki/` folder to `/tmp/wiki-backup` first. Processed the note in 31s for $0.0385. Verified `career.md` got the new entry at the top of Evolution (confirming the prepend fix), `decision-making.md` was created as a new theme page, `contradictions.md` got a new "Control vs. flow" block appended, `timeline.md` got the new entry, `log.md` got the new entry under `## 2026-04-10`, and `source_count`/`last_updated` on `career.md` frontmatter correctly bumped.
+
+**Cost summary:**
+
+| | Agentic (Claude Code) | Direct API (Swift) |
+|---|---|---|
+| Per-note cost | $0.36 | $0.011 |
+| 25 notes/day | $150-210/mo | ~$7.50/mo |
+| Ratio | — | ~33x cheaper |
+
+**Deployment:**
+- `swift build -c release` then copied the binary to `~/.local/bin/pensieve-ingest` (outside `~/Documents/` for TCC reasons)
+- Updated launchd plist to call the Swift binary directly, with `ANTHROPIC_API_KEY` in `EnvironmentVariables` (plist chmod 600). Key read from the job-crm project's `.env` file.
+- Deleted `scripts/ingest.sh` and `~/.local/bin/pensieve-ingest.sh`
+
+**One pending manual action:** user needs to grant Full Disk Access to `/Users/Karthik/.local/bin/pensieve-ingest` in System Settings → Privacy & Security → Full Disk Access. This CANNOT be automated — macOS TCC requires GUI consent. Until granted, tomorrow's 10:17 launchd run will fail the same way cron did.
+
+**Notes for future sessions:**
+- **Prompt caching isn't firing** (`cache_read/write: 0/0` on both runs). System prompt is probably under the 1024-token minimum. Easy optimization: pad with concrete examples or cache the user-message block containing the wiki state. Current cost is low enough that this isn't urgent.
+- **iOS port path is clear.** Import `PensieveIngestCore` as a local SPM dependency in `project.yml`. The only nontrivial piece is swapping direct `FileManager` paths for the security-scoped bookmark code already in `ObsidianStorageService.swift`. This would eliminate the Mac dependency entirely and remove the TCC/FDA problem.
+- **The `.env` at `~/Documents/work/vibes/job-crm/.env` is where this project's `ANTHROPIC_API_KEY` lives.** There is no keychain entry for it.
+
 ## Stack
 
 - **iOS App:** Swift, SwiftUI, iOS 17+
 - **On-device transcription:** WhisperKit (Whisper base model, ~150MB)
 - **Theme extraction:** Claude API (claude-sonnet-4-6)
 - **Wiki browser:** Obsidian (free, iCloud sync)
-- **Wiki maintenance:** Claude Code (daily cron via `scripts/ingest.sh`)
+- **Wiki maintenance:** Swift binary (`pensieve-ingest`) invoking Claude API directly, scheduled via launchd at 10:17am daily. Replaces the old `scripts/ingest.sh` + Claude Code agentic path for ~33x cost savings.
 - **Project generation:** xcodegen

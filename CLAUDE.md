@@ -109,14 +109,18 @@ Uses iOS security-scoped bookmarks to persist folder access. User picks vault vi
 ## Current State (April 2026)
 
 - App is functional, installed on user's phone
-- Wiki ingestion tested and working
+- Wiki ingestion rewritten as a Swift binary (`pensieve-ingest`) that does a single direct Claude API call — ~33x cheaper than the old agentic Claude Code path (~$0.01/note vs ~$0.36/note on a measured 10-note run)
 - User is in "collect data for a week" mode — do NOT add features unless asked
+
+### Pending manual action
+**Grant Full Disk Access to `/Users/Karthik/.local/bin/pensieve-ingest`** in System Settings → Privacy & Security → Full Disk Access. Until this is done, the daily 10:17am launchd run will fail with "Operation not permitted" because launchd-spawned binaries can't read the iCloud Obsidian vault without FDA. Test after granting: `launchctl kickstart -k gui/$(id -u)/com.karthikshashidhar.pensieve.ingest && sleep 3 && cat /tmp/pensieve-ingest.log`
 
 ### Deferred work (user explicitly deferred these)
 1. **Retrieval/resurfacing** — daily digests, "you're going in circles" alerts, related past notes on new capture. Waiting for usage data.
-2. **Phone-only wiki ingestion** — currently needs Mac. Could move ingestion to in-app Claude API call.
-3. **Action item routing** — extract tasks from notes, push to external systems.
-4. **Blog post revision** — first draft written, may revise after more usage.
+2. **Phone-only wiki ingestion** — currently needs Mac. Path is now clear: `PensieveIngestCore` is platform-agnostic and can be imported into the iOS app as a local SPM dependency via `project.yml`. The nontrivial part is swapping `FileManager` direct paths for the iOS security-scoped bookmark code that already exists in `ObsidianStorageService.swift`.
+3. **Prompt caching optimization** — current runs show `cache_read/write: 0/0` because the system prompt is under the 1024-token cache minimum. Padding the system prompt with concrete examples (or caching the user-message block containing the wiki state) would cut cost by another ~30-50%. Not urgent at current cost level.
+4. **Action item routing** — extract tasks from notes, push to external systems.
+5. **Blog post revision** — first draft written, may revise after more usage.
 
 ## GitHub
 Repo: `github.com/skthewimp/pensieve`
