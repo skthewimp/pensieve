@@ -9,10 +9,10 @@ Phone (iOS)                              Mac
 ┌─────────────────────┐                 ┌────────────────────────────┐
 │ 1. Record voice     │                 │ Obsidian (browse wiki)     │
 │ 2. WhisperKit       │   iCloud sync   │                            │
-│    (on-device)      │   via Obsidian  │ Daily cron (10:17am):      │
-│ 3. Claude API       │ ─────────────→  │   scripts/ingest.sh        │
-│    (theme extract)  │                 │   → Claude Code reads raw  │
-│ 4. Save .md to      │                 │   → updates wiki pages     │
+│    (on-device)      │   via Obsidian  │ Daily launchd (10:17am):   │
+│ 3. Claude API       │ ─────────────→  │   pensieve-ingest (Swift)  │
+│    (theme extract)  │                 │   → direct Claude API call │
+│ 4. Save .md to      │                 │   → applies JSON patch     │
 │    Obsidian vault   │                 │                            │
 └─────────────────────┘                 └────────────────────────────┘
 ```
@@ -21,7 +21,9 @@ Phone (iOS)                              Mac
 Record audio → WhisperKit transcribes on-device → Claude API (claude-sonnet-4-6) extracts title, themes, emotional tone, key quotes, connections → saves structured markdown to `raw/` in Obsidian vault.
 
 ### Mac wiki ingestion
-`scripts/ingest.sh` runs daily via cron. It checks `raw/` for notes not yet in `wiki/log.md`, then runs Claude Code with `wiki/CLAUDE.md` instructions to update theme pages, timeline, contradictions, and index.
+`scripts/pensieve-ingest/` is a Swift Package. The `pensieve-ingest` binary (installed to `~/.local/bin/`) runs daily via a launchd user agent at `~/Library/LaunchAgents/com.karthikshashidhar.pensieve.ingest.plist`. It finds unprocessed notes in `raw/` (by diffing against `wiki/log.md`), makes a single direct Claude API call with the wiki state + new notes, and applies the returned JSON patch to theme pages, timeline, contradictions, log, and index. `PensieveIngestCore` (the library target) is platform-agnostic so it can be imported into the iOS app for phone-only ingestion later.
+
+Requires Full Disk Access granted to `/Users/Karthik/.local/bin/pensieve-ingest` so launchd-spawned runs can access the iCloud vault. API key is set via `ANTHROPIC_API_KEY` in the launchd plist's `EnvironmentVariables`.
 
 ### Obsidian vault location
 `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/SecondBrain/`
@@ -65,7 +67,17 @@ wiki/
     insights/
 
 scripts/
-  ingest.sh                      # Daily cron script for wiki ingestion
+  pensieve-ingest/                 # Swift Package
+    Package.swift
+    Sources/
+      PensieveIngest/              # CLI entry point (main.swift)
+      PensieveIngestCore/          # Reusable library
+        IngestEngine.swift         # Orchestrator
+        ClaudeClient.swift         # Direct Anthropic API client
+        VaultReader.swift          # Reads raw/ and wiki/ files
+        VaultWriter.swift          # Applies IngestionPatch to the vault
+        Prompts.swift              # System + user prompts
+        Models.swift               # RawNote, IngestionPatch, etc.
 ```
 
 ## Key Technical Details

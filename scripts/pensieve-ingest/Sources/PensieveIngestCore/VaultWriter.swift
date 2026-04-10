@@ -88,7 +88,7 @@ public struct VaultWriter {
             content = replaceSection(content, heading: "## Current State", newBody: newState)
         }
 
-        content = appendToSection(content, heading: "## Evolution", appendBody: update.evolutionAppend)
+        content = prependToSection(content, heading: "## Evolution", body: update.evolutionAppend)
 
         try content.write(to: file, atomically: true, encoding: .utf8)
     }
@@ -146,19 +146,13 @@ public struct VaultWriter {
         return result
     }
 
-    private func appendToSection(_ content: String, heading: String, appendBody: String) -> String {
+    private func prependToSection(_ content: String, heading: String, body: String) -> String {
         guard let headingRange = content.range(of: heading) else {
-            return content + "\n\n" + heading + "\n\n" + appendBody + "\n"
+            return content + "\n\n" + heading + "\n\n" + body + "\n"
         }
-        let nextHeadingRange = content.range(
-            of: "\n## ", range: headingRange.upperBound..<content.endIndex
-        )
-        let insertAt = nextHeadingRange?.lowerBound ?? content.endIndex
-
+        let insertAt = content.index(after: headingRange.upperBound)
         var result = String(content[..<insertAt])
-        if !result.hasSuffix("\n") { result += "\n" }
-        if !result.hasSuffix("\n\n") { result += "\n" }
-        result += appendBody.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
+        result += "\n" + body.trimmingCharacters(in: .whitespacesAndNewlines) + "\n\n"
         if insertAt < content.endIndex {
             result += content[insertAt...]
         }
