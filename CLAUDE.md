@@ -119,8 +119,9 @@ Uses iOS security-scoped bookmarks to persist folder access. User picks vault vi
 1. **Retrieval/resurfacing** — daily digests, "you're going in circles" alerts, related past notes on new capture. Waiting for usage data.
 2. **Phone-only wiki ingestion** — currently needs Mac. Path is now clear: `PensieveIngestCore` is platform-agnostic and can be imported into the iOS app as a local SPM dependency via `project.yml`. The nontrivial part is swapping `FileManager` direct paths for the iOS security-scoped bookmark code that already exists in `ObsidianStorageService.swift`.
 3. **Prompt caching optimization** — current runs show `cache_read/write: 0/0` because the system prompt is under the 1024-token cache minimum. Padding the system prompt with concrete examples (or caching the user-message block containing the wiki state) would cut cost by another ~30-50%. Not urgent at current cost level.
-4. **Action item routing** — extract tasks from notes, push to external systems.
-5. **Blog post revision** — first draft written, may revise after more usage.
+4. **Contradiction provenance tagging** — every entry in `contradictions.md` should be tagged as `EXTRACTED` (literal verbatim clash between two dated quotes), `INFERRED` (Claude's reading that two positions are in tension), or `AMBIGUOUS` (possibly contradictory, interpretation-dependent). Idea stolen from [safishamsi/graphify](https://github.com/safishamsi/graphify), which uses the same tagging for graph edges. Rationale: the contradictions page is the most valuable page in the wiki, and a hallucinated contradiction is much worse than a missed one — this tag lets the reader trust the mirror. Implementation is small: add a `kind: "extracted" | "inferred" | "ambiguous"` field to the contradictions schema in `IngestionPatch`, update the system prompt in `Prompts.swift` to require verbatim citations with source note IDs for `extracted` entries, and have the writer render the tag as a callout (`> [!extracted]` / `> [!inferred]` / `> [!ambiguous]`) at the top of each contradiction block. ~20 lines of Swift + a prompt tweak. Defer until after the data-collection week.
+5. **Action item routing** — extract tasks from notes, push to external systems.
+6. **Blog post revision** — first draft written, may revise after more usage.
 
 ## GitHub
 Repo: `github.com/skthewimp/pensieve`
