@@ -11,6 +11,10 @@ let package = Package(
     targets: [
         .executableTarget(name: "PensieveIngest", dependencies: ["PensieveIngestCore"]),
         .target(name: "PensieveIngestCore"),
-        .testTarget(name: "PensieveIngestCoreTests", dependencies: ["PensieveIngestCore"]),
+        .testTarget(
+            name: "PensieveIngestCoreTests",
+            dependencies: ["PensieveIngestCore"],
+            resources: [.copy("Fixtures")]
+        ),
     ]
 )
