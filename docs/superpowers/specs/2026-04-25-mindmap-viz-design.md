@@ -53,9 +53,9 @@ scripts/pensieve-ingest/Sources/PensieveIngestCore/
   VaultWriter.swift          EDIT  — write mindmap.json + mindmap.html
   Models.swift               (no change — IngestionPatch unchanged)
 
-wiki/
-  mindmap.json               NEW   — canonical tree state, committed to git
-  mindmap.html               NEW   — generated each run, committed to git
+wiki/                              (lives in iCloud Obsidian vault, NOT git-tracked)
+  mindmap.json               NEW   — canonical tree state, persisted in vault, synced via iCloud
+  mindmap.html               NEW   — regenerated each run, opened directly from vault
 ```
 
 ## Data model
@@ -107,14 +107,15 @@ The system prompt for the mindmap call enforces:
 1. **Stable IDs.** Reuse existing IDs. Mint new IDs only for genuinely new sub-themes. Dot-path slugs.
 2. **Conservative restructuring.** Prefer `update` over `remove`+`add`. Don't reshuffle for no reason.
 3. **`importance` (0-10)** = how central this is to the user's life *right now*, judged from theme pages, not legacy. Fresh judgment per run is fine.
-4. **`noteCount`** = cumulative count of raw notes mentioning this node. Source of truth: `wiki/log.md`. Increment, don't reset.
-5. **Insights — at most 5.** Only flag genuine mismatches:
-    - `tooDeep`: `noteCount` high, `importance` low (heuristic seed: >20 and ≤4)
-    - `shouldGoDeeper`: `noteCount` low, `importance` high (≤3 and ≥8)
+4. **`noteCount`** is computed deterministically by Swift from `wiki/log.md`, **not** by the LLM. The engine pre-computes `noteCounts: [nodeId: Int]` from log entries (each log entry maps a raw note to the theme pages it touched; we count node occurrences) and passes the map into the prompt. The LLM treats `noteCount` as read-only context and never emits or modifies it via `update`. Rationale: cheaper, deterministic, eliminates a class of LLM arithmetic errors.
+5. **Insights — at most 5.** Only flag genuine mismatches. Thresholds below are **guidance, not hard gates** — the LLM may use judgment to skip a node that meets a threshold but isn't actually a useful insight, and may flag a borderline node it judges meaningful.
+    - `tooDeep`: `noteCount` high, `importance` low (seed: >20 and ≤4)
+    - `shouldGoDeeper`: `noteCount` low, `importance` high (seed: ≤3 and ≥8)
     - `tooShallow`: mentioned repeatedly but no sub-themes spawned
     - `tooBroad`: >7 siblings under one parent without clear hierarchy
 6. **Depth cap: 4 levels** below root. Beyond that, summarize into parent.
 7. **Empty `operations` is valid output** when nothing changed.
+8. **Concrete JSON examples per `NodeOp` variant must appear in the prompt.** Swift's synthesized `Codable` for enums-with-associated-values has a specific JSON shape (`{"add": {"parentId": "...", "node": {...}}}`, etc.); without examples the LLM will invent its own discriminator scheme and decoding will fail. The prompt includes one minimal example per case (`add`, `update`, `move`, `merge`, `remove`).
 
 ## Renderer
 
