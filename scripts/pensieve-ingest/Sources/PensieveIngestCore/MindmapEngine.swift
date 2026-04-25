@@ -67,10 +67,20 @@ public struct MindmapEngine {
     }
 
     private func stampNoteCounts(_ state: MindmapState, counts: [String: Int]) -> MindmapState {
+        // Match a node id to a theme slug by its last dot-segment so that
+        // consolidated paths like "work.career" still pick up the "career"
+        // theme's source_count. Then roll children's counts up to parents so
+        // grouping nodes ("work", "self") inherit visual weight from their
+        // descendants instead of staying at 0.
+        func leafSlug(_ id: String) -> String {
+            id.split(separator: ".").last.map(String.init) ?? id
+        }
         func walk(_ n: MindmapNode) -> MindmapNode {
             var copy = n
-            if let c = counts[n.id] { copy.noteCount = c }
             copy.children = copy.children.map(walk)
+            let ownCount = counts[leafSlug(n.id)] ?? 0
+            let childSum = copy.children.reduce(0) { $0 + $1.noteCount }
+            copy.noteCount = ownCount + childSum
             return copy
         }
         return MindmapState(version: state.version, lastUpdated: state.lastUpdated, root: walk(state.root))

@@ -61,10 +61,14 @@ public enum MindmapPrompts {
     4. `importance` (0-10) = how central this is to the user's life RIGHT NOW based
        on the theme pages. Fresh judgment per run is fine.
     5. `noteCount` is read-only context. For `add`, always set `noteCount: 0` in
-       the new node — the engine overwrites it deterministically from theme
-       frontmatter (or leaves 0 for sub-themes below the theme level, by design
-       in v1). Never include `noteCount` in `update` payloads — the schema has
-       no slot for it anyway.
+       the new node — the engine overwrites it deterministically. The engine
+       resolves a node's count by matching the LAST dot-segment of its id to
+       a theme slug in the `noteCounts` map (so node id "work.career" pulls
+       from `noteCounts["career"]`), then rolls up child counts to parents.
+       Never include `noteCount` in `update` payloads — the schema has no slot
+       for it anyway. When emitting insights, attribute volume to the LEAF
+       segment of the node id: e.g., to flag "work.consulting" as too deep,
+       look up `noteCounts["consulting"]`.
     6. Insights — at most 5. Thresholds below are guidance, not hard gates: skip a
        node that meets a threshold but isn't actually meaningful, and feel free to
        flag a borderline node you judge meaningful.
