@@ -55,29 +55,58 @@ public enum MindmapPrompts {
        Writing + Consumption + Sports → group under "Personal".
        The "consolidate to ≤5" requirement OVERRIDES the conservative-restructuring
        rule below — large `move` batches are expected and correct in this case.
-    3. Conservative restructuring otherwise. Prefer `update` over remove+add. Don't
-       reshuffle without a real reason. Rule 2 (top-level cap) is the only license
-       for big restructurings.
-    4. `importance` (0-10) = how central this is to the user's life RIGHT NOW based
+    3. **DECOMPOSE LEAVES WITH RICH CONTENT.** The map should reach depth 3-4
+       wherever content warrants it, not stop at depth 2. For any leaf node
+       whose source theme page has 8+ notes AND mentions 3+ distinct threads
+       in its `Current State` or summary, you SHOULD spawn sub-theme nodes
+       under it in THIS pass. Look at the theme page content — name the
+       actual sub-threads (e.g. AI page mentions "org transformation, pricing
+       economics, persistent memory, infant cognition" → spawn
+       `tech.ai.org-transformation`, `tech.ai.pricing-economics`, etc.).
+       Use the same reasoning the LLM would use to suggest "this should be
+       split" — but actually do the split via `add` ops here. Aim for nodes
+       at depth 3-4 to be specific concepts (e.g. "Babbage postmortem",
+       "Red Hat model"), not categories.
+    4. Conservative restructuring otherwise. Prefer `update` over remove+add. Don't
+       reshuffle without reason. Rules 2 and 3 are the licenses for big changes.
+    5. `importance` (0-10) = how central this is to the user's life RIGHT NOW based
        on the theme pages. Fresh judgment per run is fine.
-    5. `noteCount` is read-only context. For `add`, always set `noteCount: 0` in
+    6. `noteCount` is read-only context. For `add`, always set `noteCount: 0` in
        the new node — the engine overwrites it deterministically. The engine
        resolves a node's count by matching the LAST dot-segment of its id to
        a theme slug in the `noteCounts` map (so node id "work.career" pulls
        from `noteCounts["career"]`), then rolls up child counts to parents.
        Never include `noteCount` in `update` payloads — the schema has no slot
-       for it anyway. When emitting insights, attribute volume to the LEAF
-       segment of the node id: e.g., to flag "work.consulting" as too deep,
-       look up `noteCounts["consulting"]`.
-    6. Insights — at most 5. Thresholds below are guidance, not hard gates: skip a
-       node that meets a threshold but isn't actually meaningful, and feel free to
-       flag a borderline node you judge meaningful.
-       - tooDeep:        noteCount high, importance low (seed: >20 and ≤4)
-       - shouldGoDeeper: noteCount low, importance high (seed: ≤3 and ≥8)
-       - tooShallow:     mentioned repeatedly but no sub-themes
-       - tooBroad:       >7 siblings under one parent without hierarchy
-    7. Depth cap: 4 levels below root. Beyond that, summarize into the parent.
-    8. Empty `operations` is valid output when nothing changed.
+       for it anyway.
+    7. **Insights — at most 5, and they MUST be observations about the user's
+       thinking and behavior, NOT suggestions for how to organize the mind
+       map.** Bad insight: "Career has 38 notes — consider splitting into
+       sub-themes." Good insight: "You've revisited the Babbage postmortem
+       from 5 different angles in 6 weeks — productive iteration, or stuck
+       loop?" Pull SPECIFIC content from the theme pages: named patterns,
+       repeated tensions, neglect, contradictions between stated importance
+       and actual attention. Reference real things from the notes, not the
+       structure of the tree.
+
+       Use the four `kind` tags as framing for what's happening to the user,
+       not what's happening to the tree:
+       - `tooDeep`: user is grinding on this past productive return; same
+         points repeating across many recent notes. (Seed: noteCount high
+         AND importance dropping in the page summary.)
+       - `shouldGoDeeper`: user keeps hinting at this but never sits with it.
+         Mentioned in 3+ theme pages but only 1-2 notes of its own.
+       - `tooShallow`: stated as central but very little actual exploration.
+         (Seed: high importance, low noteCount, especially when the theme
+         page reads as anchored on one or two thin observations.)
+       - `tooBroad`: thinking is scattered across many siblings without
+         landing — too many topics under one parent without a thread tying
+         them.
+
+       Each insight's `message` should reference at least one specific named
+       thing from the theme pages (a person, a postmortem, a model name, a
+       concrete pattern) — not a generic claim.
+    8. Depth cap: 4 levels below root. Beyond that, summarize into the parent.
+    9. Empty `operations` is valid output when nothing changed.
 
     Return only the JSON. Nothing else.
     """
