@@ -10,6 +10,8 @@ public struct VaultWriter {
     private var timelineFile: URL { wikiDir.appendingPathComponent("timeline.md") }
     private var contradictionsFile: URL { wikiDir.appendingPathComponent("tensions/contradictions.md") }
     private var indexFile: URL { wikiDir.appendingPathComponent("index.md") }
+    private var mindmapJSONFile: URL { wikiDir.appendingPathComponent("mindmap.json") }
+    private var mindmapHTMLFile: URL { wikiDir.appendingPathComponent("mindmap.html") }
 
     public func apply(patch: IngestionPatch, notes: [RawNote]) throws {
         try FileManager.default.createDirectory(at: themesDir, withIntermediateDirectories: true)
@@ -28,6 +30,15 @@ public struct VaultWriter {
         if let newIndex = patch.indexRewrite, !newIndex.isEmpty {
             try newIndex.write(to: indexFile, atomically: true, encoding: .utf8)
         }
+    }
+
+    public func writeMindmap(state: MindmapState, html: String) throws {
+        try FileManager.default.createDirectory(at: wikiDir, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(state)
+        try data.write(to: mindmapJSONFile, options: .atomic)
+        try html.write(to: mindmapHTMLFile, atomically: true, encoding: .utf8)
     }
 
     private func appendLogEntries(_ entries: [IngestionPatch.LogEntry], notes: [RawNote]) throws {
