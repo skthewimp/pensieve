@@ -897,9 +897,11 @@ public enum MindmapPrompts {
        without a real reason.
     3. `importance` (0-10) = how central this is to the user's life RIGHT NOW based
        on the theme pages. Fresh judgment per run is fine.
-    4. `noteCount` is read-only context. Never include `noteCount` in `add` or `update`
-       payloads — the engine fills it in deterministically. (If you do, it will be
-       discarded.)
+    4. `noteCount` is read-only context. For `add`, always set `noteCount: 0` in
+       the new node — the engine overwrites it deterministically from theme
+       frontmatter (or leaves 0 for sub-themes below the theme level, by design
+       in v1). Never include `noteCount` in `update` payloads — the schema has
+       no slot for it anyway.
     5. Insights — at most 5. Thresholds below are guidance, not hard gates: skip a
        node that meets a threshold but isn't actually meaningful, and feel free to
        flag a borderline node you judge meaningful.
@@ -1426,7 +1428,7 @@ Add to `dev-log.md` (matching the existing format — read the file first to see
 - Two sequential Claude calls (ingest, then mindmap) instead of one. User pushed back on cramming both into one call (context rot risk). Sequential lets the mindmap pass see the freshly-rewritten theme pages.
 - Standalone `wiki/mindmap.html` rendered by `pensieve-ingest`, single self-contained file with D3 from CDN and data inlined. iOS port deferred.
 - Stateful tree (`wiki/mindmap.json`) with daily diff via `MindmapPatch` ops — kills layout jitter, enables future "growth over time" views.
-- `noteCount` computed deterministically from `log.md` by Swift, not by the LLM. Eliminates a class of arithmetic errors.
+- `noteCount` computed deterministically by Swift from theme YAML `source_count` (already maintained by `VaultWriter.bumpFrontmatter`), not by the LLM. Sub-themes carry 0 in v1 — no deterministic source exists below theme level. Eliminates a class of arithmetic errors.
 - Radial collapsible D3 layout (matches the user's hand sketch).
 - Mindmap failure is non-fatal — wiki ingest already succeeded by then.
 
