@@ -17,6 +17,9 @@ struct SecondBrainApp: App {
 
                     // Load Whisper model in background
                     await captureService.loadWhisperModel()
+
+                    // Resume any notes stuck mid-pipeline from a prior session
+                    await captureService.resumeStuckNotes()
                 }
         }
     }

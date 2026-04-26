@@ -13,6 +13,7 @@ struct ThoughtNote: Identifiable, Codable {
     var themes: [String]?
     var emotionalTone: String?
     var savedToWiki: Bool
+    var lastError: String?
 
     init(id: String = UUID().uuidString,
          filename: String,
@@ -24,7 +25,8 @@ struct ThoughtNote: Identifiable, Codable {
          summary: String? = nil,
          themes: [String]? = nil,
          emotionalTone: String? = nil,
-         savedToWiki: Bool = false) {
+         savedToWiki: Bool = false,
+         lastError: String? = nil) {
         self.id = id
         self.filename = filename
         self.audioURL = audioURL
@@ -36,6 +38,7 @@ struct ThoughtNote: Identifiable, Codable {
         self.themes = themes
         self.emotionalTone = emotionalTone
         self.savedToWiki = savedToWiki
+        self.lastError = lastError
     }
 
     var formattedDuration: String {

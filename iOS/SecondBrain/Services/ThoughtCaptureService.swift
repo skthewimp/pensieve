@@ -95,20 +95,25 @@ class ThoughtCaptureService: ObservableObject {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
 
         await MainActor.run { isProcessing = true }
+        await clearError(id: id)
+
+        let audioURL = notes[index].audioURL
+        if !FileManager.default.fileExists(atPath: audioURL.path) {
+            await fail(id: id, stage: "Audio", error: "File missing at \(audioURL.lastPathComponent)")
+            return
+        }
 
         // Step 1: Transcribe
         await updateStatus(id: id, status: .transcribing)
         do {
-            let transcription = try await transcriptionService.transcribe(audioURL: notes[index].audioURL)
+            let transcription = try await transcriptionService.transcribe(audioURL: audioURL)
             await MainActor.run {
                 if let i = notes.firstIndex(where: { $0.id == id }) {
                     notes[i].transcription = transcription
                 }
             }
         } catch {
-            print("Transcription failed: \(error)")
-            await updateStatus(id: id, status: .failed)
-            await MainActor.run { isProcessing = false }
+            await fail(id: id, stage: "Transcribe", error: error.localizedDescription)
             return
         }
 
@@ -116,9 +121,7 @@ class ThoughtCaptureService: ObservableObject {
 
         // Step 2: Process with Claude
         guard let claudeService = claudeService else {
-            print("Claude API not configured")
-            await updateStatus(id: id, status: .failed)
-            await MainActor.run { isProcessing = false }
+            await fail(id: id, stage: "Claude", error: "API key not configured in Settings")
             return
         }
 
@@ -135,9 +138,7 @@ class ThoughtCaptureService: ObservableObject {
                 }
             }
         } catch {
-            print("Claude processing failed: \(error)")
-            await updateStatus(id: id, status: .failed)
-            await MainActor.run { isProcessing = false }
+            await fail(id: id, stage: "Claude", error: error.localizedDescription)
             return
         }
 
@@ -154,9 +155,7 @@ class ThoughtCaptureService: ObservableObject {
                 }
             }
         } catch {
-            print("Save failed: \(error)")
-            await updateStatus(id: id, status: .failed)
-            await MainActor.run { isProcessing = false }
+            await fail(id: id, stage: "Save", error: error.localizedDescription)
             return
         }
 
@@ -165,9 +164,41 @@ class ThoughtCaptureService: ObservableObject {
         saveNotes()
     }
 
+    private func fail(id: String, stage: String, error: String) async {
+        print("\(stage) failed: \(error)")
+        await MainActor.run {
+            if let i = notes.firstIndex(where: { $0.id == id }) {
+                notes[i].lastError = "\(stage): \(error)"
+                notes[i].status = .failed
+            }
+            isProcessing = false
+        }
+        saveNotes()
+    }
+
+    private func clearError(id: String) async {
+        await MainActor.run {
+            if let i = notes.firstIndex(where: { $0.id == id }) {
+                notes[i].lastError = nil
+            }
+        }
+    }
+
     /// Retry processing a failed note
     func retryNote(id: String) async {
         await processNote(id: id)
+    }
+
+    /// Resume any notes left in a non-terminal state (e.g. app was killed mid-pipeline).
+    /// Each pipeline step is idempotent, so restarting from the top is safe.
+    func resumeStuckNotes() async {
+        let stuckIDs = notes
+            .filter { $0.status != .completed && $0.status != .failed }
+            .map { $0.id }
+
+        for id in stuckIDs {
+            await processNote(id: id)
+        }
     }
 
     /// Reprocess and save all notes that have transcriptions but weren't saved to the wiki

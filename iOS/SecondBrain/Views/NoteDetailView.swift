@@ -71,6 +71,23 @@ struct NoteDetailView: View {
                     }
                 }
 
+                // Error (if failed)
+                if note.status == .failed, let err = note.lastError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Error", systemImage: "exclamationmark.triangle.fill")
+                            .font(.headline)
+                            .foregroundColor(.red)
+                        Text(err)
+                            .font(.callout)
+                            .foregroundColor(.red)
+                            .textSelection(.enabled)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.red.opacity(0.08))
+                            .cornerRadius(8)
+                    }
+                }
+
                 // Status
                 HStack {
                     Spacer()
