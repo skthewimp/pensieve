@@ -371,7 +371,7 @@ Obsidian is fine for browsing, but eventually this probably wants a dedicated qu
 
 ### 6. Export and research mode
 
-This corpus could support writing, therapy prep, decision reviews, and life retrospectives.
+This corpus could support writing, decision reviews, and life retrospectives.
 
 Useful exports:
 

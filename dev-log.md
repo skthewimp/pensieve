@@ -11,7 +11,7 @@
 
 Karthik shared a link to Andrej Karpathy's viral "LLM Wiki" gist - a pattern for building personal knowledge bases where an LLM incrementally builds and maintains a structured wiki from raw sources, rather than doing RAG-style retrieval from scratch every time.
 
-The conversation evolved from "how do I use this?" into designing a personal system. The key constraint: Karthik's therapist recommended externalising his thinking but didn't say how to implement it. The problem wasn't just note-taking - it was tracking how his thinking evolves over time (especially around career decisions) and spotting when he's going in circles.
+The conversation evolved from "how do I use this?" into designing a personal system. The problem wasn't just note-taking - it was tracking how Karthik's thinking evolves over time (especially around career decisions) and spotting when he's going in circles.
 
 ## Prompts and Decisions
 
@@ -25,7 +25,7 @@ Fetched the gist, summarized the LLM Wiki pattern, asked what domain to apply it
 
 Checked memory - knew about writing voice, data science background, Babbage Insight. Suggested a research/writing wiki since his writing is built on cross-domain connections.
 
-**Prompt:** [Long voice-transcribed message about thought management, therapist's recommendation, needing zero-friction input, existing voice notes app]
+**Prompt:** [Long voice-transcribed message about thought management, the need to externalise thinking, zero-friction input, existing voice notes app]
 
 This was the key design moment. Three critical constraints emerged:
 1. Input must be dead simple (just talk)
