@@ -13,6 +13,11 @@ struct RootView: View {
                     Label("Notes", systemImage: "note.text")
                 }
 
+            WikiView()
+                .tabItem {
+                    Label("Wiki", systemImage: "books.vertical")
+                }
+
             ChatView()
                 .tabItem {
                     Label("Chat", systemImage: "bubble.left.and.bubble.right")
