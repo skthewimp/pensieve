@@ -9,6 +9,11 @@ struct SettingsView: View {
     @State private var importMessage: String?
     @State private var isImporting = false
     @State private var isShowingImporter = false
+    @State private var backupDocument = PensieveBackupDocument()
+    @State private var backupFilename = "pensieve-backup"
+    @State private var backupMessage: String?
+    @State private var isPreparingBackup = false
+    @State private var isShowingBackupExporter = false
 
     var body: some View {
         NavigationStack {
@@ -47,7 +52,25 @@ struct SettingsView: View {
                     Text("Audio stays on device. Transcription happens on device. Text selected for processing is sent to Anthropic using your API key.")
                 }
 
-                Section("Personal Import") {
+                Section("Backup") {
+                    Button {
+                        prepareBackup()
+                    } label: {
+                        Label("Export Pensieve Backup", systemImage: "externaldrive")
+                    }
+                    .disabled(isPreparingBackup)
+
+                    if isPreparingBackup {
+                        ProgressView("Preparing backup...")
+                    }
+
+                    if let backupMessage {
+                        Text(backupMessage)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Migration") {
                     Button {
                         isShowingImporter = true
                     } label: {
@@ -73,6 +96,14 @@ struct SettingsView: View {
             ) { result in
                 handleImport(result)
             }
+            .fileExporter(
+                isPresented: $isShowingBackupExporter,
+                document: backupDocument,
+                contentType: .json,
+                defaultFilename: backupFilename
+            ) { result in
+                handleBackupExport(result)
+            }
         }
     }
 
@@ -85,6 +116,38 @@ struct SettingsView: View {
         } catch {
             saveMessage = nil
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func prepareBackup() {
+        isPreparingBackup = true
+        backupMessage = nil
+
+        Task {
+            do {
+                let data = try await appModel.exportBackupData()
+                let filename = appModel.backupFilename()
+                await MainActor.run {
+                    backupDocument = PensieveBackupDocument(data: data)
+                    backupFilename = filename
+                    isPreparingBackup = false
+                    isShowingBackupExporter = true
+                }
+            } catch {
+                await MainActor.run {
+                    backupMessage = error.localizedDescription
+                    isPreparingBackup = false
+                }
+            }
+        }
+    }
+
+    private func handleBackupExport(_ result: Result<URL, Error>) {
+        switch result {
+        case .success:
+            backupMessage = "Backup exported."
+        case .failure(let error):
+            backupMessage = error.localizedDescription
         }
     }
 

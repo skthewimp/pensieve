@@ -84,6 +84,16 @@ final class AppModel: ObservableObject {
         return result
     }
 
+    func exportBackupData() async throws -> Data {
+        try await localStore.exportBackupData()
+    }
+
+    func backupFilename() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd-HHmm"
+        return "pensieve-backup-\(formatter.string(from: Date()))"
+    }
+
     private func notesForQuery(_ query: String) -> [MemoryNote] {
         let queryTerms = Set(
             query

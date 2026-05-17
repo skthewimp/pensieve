@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01E23F759694CDB7B77197CF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 93B2E68B6582C9D10A7AF148 /* Assets.xcassets */; };
+		038350E72146BD84714B4995 /* PensieveBackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62FD1227FDE9BE3F43007771 /* PensieveBackupDocument.swift */; };
 		1C3B13D5B30D69AD082C0436 /* MemoryNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8950EF02137FA8590114F088 /* MemoryNote.swift */; };
 		36EC69CC2EE1F9D9C056E0B9 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3736955794D624A65AEF378D /* NotesView.swift */; };
 		52E814AFF3C789C1F0A34506 /* SecondBrainImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95BBBF8A547A1EDA4136826 /* SecondBrainImportService.swift */; };
@@ -42,6 +43,7 @@
 		4CF37120777B96908A81CCC2 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		555C5D52AEC50FABEEE9ADC5 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
 		5C6074E24C778728C8138280 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		62FD1227FDE9BE3F43007771 /* PensieveBackupDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PensieveBackupDocument.swift; sourceTree = "<group>"; };
 		8950EF02137FA8590114F088 /* MemoryNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryNote.swift; sourceTree = "<group>"; };
 		8B9CC35646A883259E98730C /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		8CF3DFE1909ADB26236E44D3 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
@@ -119,6 +121,7 @@
 				5C6074E24C778728C8138280 /* ChatMessage.swift */,
 				B9102511BF598A9CBE317B26 /* Contradiction.swift */,
 				8950EF02137FA8590114F088 /* MemoryNote.swift */,
+				62FD1227FDE9BE3F43007771 /* PensieveBackupDocument.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -230,6 +233,7 @@
 				E5D96489EDEC7CB167CB84EF /* MindmapView.swift in Sources */,
 				36EC69CC2EE1F9D9C056E0B9 /* NotesView.swift in Sources */,
 				CABC875EB608965AFC828F4D /* PensieveApp.swift in Sources */,
+				038350E72146BD84714B4995 /* PensieveBackupDocument.swift in Sources */,
 				F94562BCBB838C012A4BABFB /* RootView.swift in Sources */,
 				52E814AFF3C789C1F0A34506 /* SecondBrainImportService.swift in Sources */,
 				9BB3D5C0309FC9DC98F221C9 /* SettingsView.swift in Sources */,

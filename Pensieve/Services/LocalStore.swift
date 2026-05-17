@@ -1,11 +1,31 @@
 import Foundation
 
+struct LocalStoreSnapshot: Codable {
+    var captures: [Capture]
+    var notes: [MemoryNote]
+    var contradictions: [Contradiction]
+    var chatMessages: [ChatMessage]
+
+    init(
+        captures: [Capture] = [],
+        notes: [MemoryNote] = [],
+        contradictions: [Contradiction] = [],
+        chatMessages: [ChatMessage] = []
+    ) {
+        self.captures = captures
+        self.notes = notes
+        self.contradictions = contradictions
+        self.chatMessages = chatMessages
+    }
+}
+
 protocol LocalStore {
     func saveCapture(_ capture: Capture) async
     func saveNote(_ note: MemoryNote) async
     func saveImported(capture: Capture, note: MemoryNote) async
     func saveContradiction(_ contradiction: Contradiction) async
     func saveChatMessage(_ message: ChatMessage) async
+    func exportBackupData() async throws -> Data
     func loadCaptures() async -> [Capture]
     func loadNotes() async -> [MemoryNote]
     func loadContradictions() async -> [Contradiction]
@@ -13,14 +33,7 @@ protocol LocalStore {
 }
 
 actor FileLocalStore: LocalStore {
-    private struct Snapshot: Codable {
-        var captures: [Capture] = []
-        var notes: [MemoryNote] = []
-        var contradictions: [Contradiction] = []
-        var chatMessages: [ChatMessage] = []
-    }
-
-    private var snapshot = Snapshot()
+    private var snapshot = LocalStoreSnapshot()
     private let fileURL: URL
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -90,6 +103,10 @@ actor FileLocalStore: LocalStore {
         persist()
     }
 
+    func exportBackupData() throws -> Data {
+        try encoder.encode(snapshot)
+    }
+
     func loadCaptures() -> [Capture] {
         snapshot.captures
     }
@@ -106,13 +123,13 @@ actor FileLocalStore: LocalStore {
         snapshot.chatMessages
     }
 
-    private static func loadFromDisk(fileURL: URL, decoder: JSONDecoder) -> Snapshot {
-        guard let data = try? Data(contentsOf: fileURL) else { return Snapshot() }
+    private static func loadFromDisk(fileURL: URL, decoder: JSONDecoder) -> LocalStoreSnapshot {
+        guard let data = try? Data(contentsOf: fileURL) else { return LocalStoreSnapshot() }
         do {
-            return try decoder.decode(Snapshot.self, from: data)
+            return try decoder.decode(LocalStoreSnapshot.self, from: data)
         } catch {
             print("Failed to load local store: \(error)")
-            return Snapshot()
+            return LocalStoreSnapshot()
         }
     }
 
@@ -173,6 +190,20 @@ actor InMemoryLocalStore: LocalStore {
 
     func saveChatMessage(_ message: ChatMessage) {
         chatMessages.append(message)
+    }
+
+    func exportBackupData() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(
+            LocalStoreSnapshot(
+                captures: captures,
+                notes: notes,
+                contradictions: contradictions,
+                chatMessages: chatMessages
+            )
+        )
     }
 
     func loadCaptures() -> [Capture] {
