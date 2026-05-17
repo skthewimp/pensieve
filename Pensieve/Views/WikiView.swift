@@ -3,6 +3,7 @@ import SwiftUI
 struct WikiView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var searchText = ""
+    @State private var showAllThemes = false
 
     private var filteredNotes: [MemoryNote] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -31,6 +32,18 @@ struct WikiView: View {
             }
     }
 
+    private var visibleThemeGroups: [(theme: String, notes: [MemoryNote])] {
+        if showAllThemes || !searchText.isEmpty {
+            return themeGroups
+        }
+
+        return themeGroups.filter { $0.notes.count > 1 }
+    }
+
+    private var hiddenThemeCount: Int {
+        max(themeGroups.count - visibleThemeGroups.count, 0)
+    }
+
     private var unthemedNotes: [MemoryNote] {
         filteredNotes
             .filter { $0.themes.isEmpty }
@@ -40,9 +53,9 @@ struct WikiView: View {
     var body: some View {
         NavigationStack {
             List {
-                if !themeGroups.isEmpty {
-                    Section("Themes") {
-                        ForEach(themeGroups, id: \.theme) { group in
+                if !visibleThemeGroups.isEmpty {
+                    Section {
+                        ForEach(visibleThemeGroups, id: \.theme) { group in
                             NavigationLink {
                                 WikiThemeView(theme: group.theme, notes: group.notes)
                             } label: {
@@ -54,6 +67,16 @@ struct WikiView: View {
                                 }
                             }
                         }
+
+                        if hiddenThemeCount > 0 {
+                            Button {
+                                showAllThemes = true
+                            } label: {
+                                Label("Show \(hiddenThemeCount) one-off themes", systemImage: "ellipsis.circle")
+                            }
+                        }
+                    } header: {
+                        Text(showAllThemes || !searchText.isEmpty ? "Themes" : "Repeated Themes")
                     }
                 }
 
