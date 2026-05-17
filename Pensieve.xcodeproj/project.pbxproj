@@ -17,6 +17,7 @@
 		98AC76281E475BF25B4D48B9 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = A593217A346C1119D009B857 /* WhisperKit */; };
 		9B50FE3DFD59F2E2DB6FE485 /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 555C5D52AEC50FABEEE9ADC5 /* LLMProvider.swift */; };
 		9BB3D5C0309FC9DC98F221C9 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C2A537CA6F8F5837250CA4A /* SettingsView.swift */; };
+		A284A9EEFD963CC4AEC67F4E /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF3DFE1909ADB26236E44D3 /* KeychainService.swift */; };
 		A9192F1DBB9A30BE8440A8E3 /* ContradictionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CFF2562FD0E18AC6BF8B319 /* ContradictionsView.swift */; };
 		BD41B5C838CEC84CB477BDE6 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C6074E24C778728C8138280 /* ChatMessage.swift */; };
 		CABC875EB608965AFC828F4D /* PensieveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EFC4C388B8CBC54EEFECB58 /* PensieveApp.swift */; };
@@ -38,6 +39,7 @@
 		555C5D52AEC50FABEEE9ADC5 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
 		5C6074E24C778728C8138280 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		8950EF02137FA8590114F088 /* MemoryNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryNote.swift; sourceTree = "<group>"; };
+		8CF3DFE1909ADB26236E44D3 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		8E95364957AAF6932FB51978 /* LocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalStore.swift; sourceTree = "<group>"; };
 		8FE8C3B834F78DCF56A564E2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		93B2E68B6582C9D10A7AF148 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -94,6 +96,7 @@
 			isa = PBXGroup;
 			children = (
 				B22667F7C8E5FE144F7C9F5A /* CaptureService.swift */,
+				8CF3DFE1909ADB26236E44D3 /* KeychainService.swift */,
 				555C5D52AEC50FABEEE9ADC5 /* LLMProvider.swift */,
 				8E95364957AAF6932FB51978 /* LocalStore.swift */,
 			);
@@ -210,6 +213,7 @@
 				95D9B51D55CE3263EFE06197 /* ChatView.swift in Sources */,
 				CE32E7668B4FB79CFCB28F62 /* Contradiction.swift in Sources */,
 				A9192F1DBB9A30BE8440A8E3 /* ContradictionsView.swift in Sources */,
+				A284A9EEFD963CC4AEC67F4E /* KeychainService.swift in Sources */,
 				9B50FE3DFD59F2E2DB6FE485 /* LLMProvider.swift in Sources */,
 				6F37C5442455571AFCBF0A68 /* LocalStore.swift in Sources */,
 				1C3B13D5B30D69AD082C0436 /* MemoryNote.swift in Sources */,
