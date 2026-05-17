@@ -11,6 +11,8 @@
 		1C3B13D5B30D69AD082C0436 /* MemoryNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8950EF02137FA8590114F088 /* MemoryNote.swift */; };
 		36EC69CC2EE1F9D9C056E0B9 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3736955794D624A65AEF378D /* NotesView.swift */; };
 		53756D06F118FB69C4C86A1C /* CaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 441FA7C0D80A71DFE02BA1F5 /* CaptureView.swift */; };
+		6039A8211D11A20E5BDDA6A1 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B9CC35646A883259E98730C /* AudioRecorderService.swift */; };
+		63AF4B3383A256D908A196EC /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E987A98BA17347A1126764A /* TranscriptionService.swift */; };
 		660AEB49C6B3661F5C8A093F /* CaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B22667F7C8E5FE144F7C9F5A /* CaptureService.swift */; };
 		6F37C5442455571AFCBF0A68 /* LocalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E95364957AAF6932FB51978 /* LocalStore.swift */; };
 		95D9B51D55CE3263EFE06197 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CF37120777B96908A81CCC2 /* ChatView.swift */; };
@@ -33,12 +35,14 @@
 		1CFF2562FD0E18AC6BF8B319 /* ContradictionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContradictionsView.swift; sourceTree = "<group>"; };
 		296640D09117716CE081C318 /* Capture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Capture.swift; sourceTree = "<group>"; };
 		3736955794D624A65AEF378D /* NotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesView.swift; sourceTree = "<group>"; };
+		3E987A98BA17347A1126764A /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		3EFC4C388B8CBC54EEFECB58 /* PensieveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PensieveApp.swift; sourceTree = "<group>"; };
 		441FA7C0D80A71DFE02BA1F5 /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
 		4CF37120777B96908A81CCC2 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		555C5D52AEC50FABEEE9ADC5 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
 		5C6074E24C778728C8138280 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		8950EF02137FA8590114F088 /* MemoryNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryNote.swift; sourceTree = "<group>"; };
+		8B9CC35646A883259E98730C /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		8CF3DFE1909ADB26236E44D3 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		8E95364957AAF6932FB51978 /* LocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalStore.swift; sourceTree = "<group>"; };
 		8FE8C3B834F78DCF56A564E2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
@@ -95,10 +99,12 @@
 		5637471B16F97D7FDCFB66F1 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				8B9CC35646A883259E98730C /* AudioRecorderService.swift */,
 				B22667F7C8E5FE144F7C9F5A /* CaptureService.swift */,
 				8CF3DFE1909ADB26236E44D3 /* KeychainService.swift */,
 				555C5D52AEC50FABEEE9ADC5 /* LLMProvider.swift */,
 				8E95364957AAF6932FB51978 /* LocalStore.swift */,
+				3E987A98BA17347A1126764A /* TranscriptionService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -206,6 +212,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CB43F8C6E36C76820E1A2894 /* AppModel.swift in Sources */,
+				6039A8211D11A20E5BDDA6A1 /* AudioRecorderService.swift in Sources */,
 				F4B37443A2237665D6F59CA0 /* Capture.swift in Sources */,
 				660AEB49C6B3661F5C8A093F /* CaptureService.swift in Sources */,
 				53756D06F118FB69C4C86A1C /* CaptureView.swift in Sources */,
@@ -222,6 +229,7 @@
 				CABC875EB608965AFC828F4D /* PensieveApp.swift in Sources */,
 				F94562BCBB838C012A4BABFB /* RootView.swift in Sources */,
 				9BB3D5C0309FC9DC98F221C9 /* SettingsView.swift in Sources */,
+				63AF4B3383A256D908A196EC /* TranscriptionService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

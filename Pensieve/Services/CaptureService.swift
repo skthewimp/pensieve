@@ -3,10 +3,12 @@ import Foundation
 actor CaptureService {
     private let store: LocalStore
     private let llmProvider: LLMProvider
+    private let transcriptionService: TranscriptionService
 
-    init(store: LocalStore, llmProvider: LLMProvider) {
+    init(store: LocalStore, llmProvider: LLMProvider, transcriptionService: TranscriptionService) {
         self.store = store
         self.llmProvider = llmProvider
+        self.transcriptionService = transcriptionService
     }
 
     func submitText(_ text: String) async throws {
@@ -64,5 +66,45 @@ actor CaptureService {
             await store.saveCapture(capture)
             throw error
         }
+    }
+
+    func submitVoice(audioURL: URL, duration: TimeInterval) async throws {
+        var capture = Capture(
+            kind: .voice,
+            rawText: "",
+            audioFilePath: audioURL.path
+        )
+        await store.saveCapture(capture)
+
+        do {
+            capture.processingStatus = .processing
+            await store.saveCapture(capture)
+
+            let transcript = try await transcriptionService.transcribe(audioURL: audioURL)
+            capture.transcript = transcript
+            capture.rawText = transcript
+            await store.saveCapture(capture)
+
+            let result = try await llmProvider.processCapture(
+                CaptureProcessingInput(capture: capture, normalizedText: transcript)
+            )
+            var note = result.note
+            note.body += "\n\n## Audio\nDuration: \(Self.formatDuration(duration))\nFile: \(audioURL.lastPathComponent)"
+            await store.saveNote(note)
+
+            capture.processingStatus = .processed
+            await store.saveCapture(capture)
+        } catch {
+            capture.processingStatus = .failed
+            capture.errorMessage = error.localizedDescription
+            await store.saveCapture(capture)
+            throw error
+        }
+    }
+
+    private static func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%02d:%02d", minutes, seconds)
     }
 }

@@ -88,8 +88,73 @@ struct AnthropicProvider: LLMProvider {
     }
 
     func chat(_ request: ChatRequest) async throws -> ChatResponse {
-        ChatResponse(
-            answer: "Anthropic chat is not wired yet. This placeholder will become retrieval-backed Claude chat.",
+        guard let apiKey = keychain.loadAnthropicAPIKey() else {
+            throw AnthropicError.apiKeyMissing
+        }
+
+        let context = request.contextNotes.map { note in
+            """
+            Note ID: \(note.id.uuidString)
+            Title: \(note.title)
+            Themes: \(note.themes.joined(separator: ", "))
+            Summary:
+            \(note.summary)
+            Body:
+            \(note.body)
+            """
+        }.joined(separator: "\n\n---\n\n")
+
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 2048,
+            "system": """
+            You answer questions for a local-first personal memory app. Use the provided notes as source material. If the notes do not contain enough evidence, say so directly. Be concise, concrete, and cite the note titles you used in plain language.
+            """,
+            "messages": [
+                [
+                    "role": "user",
+                    "content": """
+                    Question:
+                    \(request.question)
+
+                    Available notes:
+                    \(context.isEmpty ? "(no saved notes yet)" : context)
+                    """
+                ]
+            ]
+        ]
+
+        var urlRequest = URLRequest(url: baseURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.addValue(apiKey, forHTTPHeaderField: "x-api-key")
+        urlRequest.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "content-type")
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let responseBody = String(data: data, encoding: .utf8) ?? "no body"
+            throw AnthropicError.apiError(statusCode: statusCode, message: responseBody)
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let contentBlocks = json["content"] as? [[String: Any]] else {
+            throw AnthropicError.invalidJSON
+        }
+
+        let answer = contentBlocks.compactMap { block -> String? in
+            guard (block["type"] as? String) == "text" else { return nil }
+            return block["text"] as? String
+        }.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !answer.isEmpty else {
+            throw AnthropicError.noTextInResponse
+        }
+
+        return ChatResponse(
+            answer: answer,
             contextNoteIDs: request.contextNotes.map(\.id)
         )
     }

@@ -3,6 +3,8 @@ import SwiftUI
 struct ChatView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var draft = ""
+    @State private var isSending = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -21,14 +23,22 @@ struct ChatView: View {
                         .textFieldStyle(.roundedBorder)
 
                     Button {
-                        draft = ""
+                        Task { await send() }
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
                     }
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending || !appModel.isAnthropicConfigured)
                 }
                 .padding()
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                }
             }
             .overlay {
                 if appModel.chatMessages.isEmpty {
@@ -36,6 +46,20 @@ struct ChatView: View {
                 }
             }
             .navigationTitle("Chat")
+        }
+    }
+
+    private func send() async {
+        let message = draft
+        draft = ""
+        isSending = true
+        errorMessage = nil
+        defer { isSending = false }
+
+        do {
+            try await appModel.sendChatMessage(message)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

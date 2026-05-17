@@ -7,16 +7,31 @@ struct CaptureView: View {
     @State private var urlNote = ""
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    @State private var currentAudioURL: URL?
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Voice") {
                     Button {
-                        // Voice recording will be wired after the app shell is stable.
+                        Task { await toggleRecording() }
                     } label: {
-                        Label("Record Voice Note", systemImage: "mic.fill")
+                        Label(
+                            appModel.audioRecorder.isRecording ? "Stop Recording" : "Record Voice Note",
+                            systemImage: appModel.audioRecorder.isRecording ? "stop.circle.fill" : "mic.fill"
+                        )
                     }
+                    .foregroundStyle(appModel.audioRecorder.isRecording ? .red : .primary)
+                    .disabled(isSubmitting || !appModel.isAnthropicConfigured || !appModel.transcriptionService.isModelLoaded)
+
+                    if appModel.audioRecorder.isRecording {
+                        Text(formatDuration(appModel.audioRecorder.recordingDuration))
+                            .font(.system(.title2, design: .monospaced))
+                            .foregroundStyle(.red)
+                    }
+
+                    Text("Whisper: \(appModel.transcriptionService.loadingProgress)")
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Text") {
@@ -80,5 +95,45 @@ struct CaptureView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func toggleRecording() async {
+        errorMessage = nil
+
+        if appModel.audioRecorder.isRecording {
+            let duration = await MainActor.run {
+                appModel.audioRecorder.stopRecording()
+            }
+            guard let currentAudioURL else { return }
+
+            isSubmitting = true
+            defer { isSubmitting = false }
+            do {
+                try await appModel.captureService.submitVoice(audioURL: currentAudioURL, duration: duration)
+                self.currentAudioURL = nil
+                await appModel.refresh()
+            } catch {
+                errorMessage = error.localizedDescription
+                await appModel.refresh()
+            }
+            return
+        }
+
+        let granted = await appModel.audioRecorder.requestPermission()
+        guard granted else {
+            errorMessage = "Microphone access is required to record voice notes."
+            return
+        }
+
+        currentAudioURL = await MainActor.run {
+            appModel.audioRecorder.startRecording()
+        }
+    }
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        let tenths = Int((duration.truncatingRemainder(dividingBy: 1)) * 10)
+        return String(format: "%02d:%02d.%01d", minutes, seconds, tenths)
     }
 }

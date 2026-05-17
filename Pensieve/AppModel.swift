@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -8,10 +9,13 @@ final class AppModel: ObservableObject {
     @Published var chatMessages: [ChatMessage] = []
     @Published var isAnthropicConfigured: Bool
 
+    let audioRecorder = AudioRecorderService()
+    let transcriptionService = TranscriptionService()
     let captureService: CaptureService
     let localStore: LocalStore
     private let keychain: KeychainService
     private let llmProvider: LLMProvider
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
         let store = FileLocalStore()
@@ -20,10 +24,22 @@ final class AppModel: ObservableObject {
         self.keychain = keychain
         self.isAnthropicConfigured = keychain.hasAnthropicAPIKey()
         self.llmProvider = AnthropicProvider(keychain: keychain)
-        self.captureService = CaptureService(store: store, llmProvider: llmProvider)
+        self.captureService = CaptureService(
+            store: store,
+            llmProvider: llmProvider,
+            transcriptionService: transcriptionService
+        )
+
+        audioRecorder.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        transcriptionService.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
 
         Task {
             await refresh()
+            await transcriptionService.loadModel()
         }
     }
 
@@ -37,5 +53,53 @@ final class AppModel: ObservableObject {
     func saveAnthropicAPIKey(_ apiKey: String) throws {
         try keychain.saveAnthropicAPIKey(apiKey)
         isAnthropicConfigured = keychain.hasAnthropicAPIKey()
+    }
+
+    func sendChatMessage(_ content: String) async throws {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let userMessage = ChatMessage(role: .user, content: trimmed)
+        await localStore.saveChatMessage(userMessage)
+        await refresh()
+
+        let context = notesForQuery(trimmed)
+        let response = try await llmProvider.chat(
+            ChatRequest(question: trimmed, contextNotes: context)
+        )
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            content: response.answer,
+            contextNoteIDs: response.contextNoteIDs
+        )
+        await localStore.saveChatMessage(assistantMessage)
+        await refresh()
+    }
+
+    private func notesForQuery(_ query: String) -> [MemoryNote] {
+        let queryTerms = Set(
+            query
+                .lowercased()
+                .split { !$0.isLetter && !$0.isNumber }
+                .map(String.init)
+                .filter { $0.count > 2 }
+        )
+
+        let scored = notes.map { note in
+            let haystack = ([note.title, note.summary, note.body] + note.themes)
+                .joined(separator: " ")
+                .lowercased()
+            let score = queryTerms.reduce(0) { partial, term in
+                partial + (haystack.contains(term) ? 1 : 0)
+            }
+            return (note: note, score: score)
+        }
+
+        let matched = scored
+            .filter { $0.score > 0 }
+            .sorted { $0.score > $1.score }
+            .map(\.note)
+
+        return Array((matched.isEmpty ? notes : matched).prefix(8))
     }
 }
