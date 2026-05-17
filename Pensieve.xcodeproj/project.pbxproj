@@ -10,6 +10,7 @@
 		01E23F759694CDB7B77197CF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 93B2E68B6582C9D10A7AF148 /* Assets.xcassets */; };
 		1C3B13D5B30D69AD082C0436 /* MemoryNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8950EF02137FA8590114F088 /* MemoryNote.swift */; };
 		36EC69CC2EE1F9D9C056E0B9 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3736955794D624A65AEF378D /* NotesView.swift */; };
+		52E814AFF3C789C1F0A34506 /* SecondBrainImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95BBBF8A547A1EDA4136826 /* SecondBrainImportService.swift */; };
 		53756D06F118FB69C4C86A1C /* CaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 441FA7C0D80A71DFE02BA1F5 /* CaptureView.swift */; };
 		6039A8211D11A20E5BDDA6A1 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B9CC35646A883259E98730C /* AudioRecorderService.swift */; };
 		63AF4B3383A256D908A196EC /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E987A98BA17347A1126764A /* TranscriptionService.swift */; };
@@ -53,6 +54,7 @@
 		B9102511BF598A9CBE317B26 /* Contradiction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Contradiction.swift; sourceTree = "<group>"; };
 		CB3281070809C96F81F1BE3F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EDA8F5386AA953191124AF08 /* MindmapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindmapView.swift; sourceTree = "<group>"; };
+		F95BBBF8A547A1EDA4136826 /* SecondBrainImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecondBrainImportService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,6 +106,7 @@
 				8CF3DFE1909ADB26236E44D3 /* KeychainService.swift */,
 				555C5D52AEC50FABEEE9ADC5 /* LLMProvider.swift */,
 				8E95364957AAF6932FB51978 /* LocalStore.swift */,
+				F95BBBF8A547A1EDA4136826 /* SecondBrainImportService.swift */,
 				3E987A98BA17347A1126764A /* TranscriptionService.swift */,
 			);
 			path = Services;
@@ -228,6 +231,7 @@
 				36EC69CC2EE1F9D9C056E0B9 /* NotesView.swift in Sources */,
 				CABC875EB608965AFC828F4D /* PensieveApp.swift in Sources */,
 				F94562BCBB838C012A4BABFB /* RootView.swift in Sources */,
+				52E814AFF3C789C1F0A34506 /* SecondBrainImportService.swift in Sources */,
 				9BB3D5C0309FC9DC98F221C9 /* SettingsView.swift in Sources */,
 				63AF4B3383A256D908A196EC /* TranscriptionService.swift in Sources */,
 			);

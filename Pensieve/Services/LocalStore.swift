@@ -3,6 +3,7 @@ import Foundation
 protocol LocalStore {
     func saveCapture(_ capture: Capture) async
     func saveNote(_ note: MemoryNote) async
+    func saveImported(capture: Capture, note: MemoryNote) async
     func saveContradiction(_ contradiction: Contradiction) async
     func saveChatMessage(_ message: ChatMessage) async
     func loadCaptures() async -> [Capture]
@@ -40,7 +41,7 @@ actor FileLocalStore: LocalStore {
         decoder.dateDecodingStrategy = .iso8601
         self.decoder = decoder
 
-        loadFromDisk()
+        self.snapshot = Self.loadFromDisk(fileURL: fileURL, decoder: decoder)
     }
 
     func saveCapture(_ capture: Capture) {
@@ -51,6 +52,29 @@ actor FileLocalStore: LocalStore {
 
     func saveNote(_ note: MemoryNote) {
         upsert(note, into: &snapshot.notes)
+        snapshot.notes.sort { $0.createdAt > $1.createdAt }
+        persist()
+    }
+
+    func saveImported(capture: Capture, note: MemoryNote) {
+        if let sourceIdentifier = capture.sourceIdentifier,
+           let existingCapture = snapshot.captures.first(where: { $0.sourceIdentifier == sourceIdentifier }) {
+            var updatedCapture = capture
+            updatedCapture.id = existingCapture.id
+            upsert(updatedCapture, into: &snapshot.captures)
+
+            var updatedNote = note
+            updatedNote.captureID = existingCapture.id
+            if let existingNote = snapshot.notes.first(where: { $0.sourceIdentifier == sourceIdentifier }) {
+                updatedNote.id = existingNote.id
+            }
+            upsert(updatedNote, into: &snapshot.notes)
+        } else {
+            upsert(capture, into: &snapshot.captures)
+            upsert(note, into: &snapshot.notes)
+        }
+
+        snapshot.captures.sort { $0.createdAt > $1.createdAt }
         snapshot.notes.sort { $0.createdAt > $1.createdAt }
         persist()
     }
@@ -82,12 +106,13 @@ actor FileLocalStore: LocalStore {
         snapshot.chatMessages
     }
 
-    private func loadFromDisk() {
-        guard let data = try? Data(contentsOf: fileURL) else { return }
+    private static func loadFromDisk(fileURL: URL, decoder: JSONDecoder) -> Snapshot {
+        guard let data = try? Data(contentsOf: fileURL) else { return Snapshot() }
         do {
-            snapshot = try decoder.decode(Snapshot.self, from: data)
+            return try decoder.decode(Snapshot.self, from: data)
         } catch {
             print("Failed to load local store: \(error)")
+            return Snapshot()
         }
     }
 
@@ -121,6 +146,25 @@ actor InMemoryLocalStore: LocalStore {
 
     func saveNote(_ note: MemoryNote) {
         upsert(note, into: &notes)
+    }
+
+    func saveImported(capture: Capture, note: MemoryNote) {
+        if let sourceIdentifier = capture.sourceIdentifier,
+           let existingCapture = captures.first(where: { $0.sourceIdentifier == sourceIdentifier }) {
+            var updatedCapture = capture
+            updatedCapture.id = existingCapture.id
+            upsert(updatedCapture, into: &captures)
+
+            var updatedNote = note
+            updatedNote.captureID = existingCapture.id
+            if let existingNote = notes.first(where: { $0.sourceIdentifier == sourceIdentifier }) {
+                updatedNote.id = existingNote.id
+            }
+            upsert(updatedNote, into: &notes)
+        } else {
+            upsert(capture, into: &captures)
+            upsert(note, into: &notes)
+        }
     }
 
     func saveContradiction(_ contradiction: Contradiction) {

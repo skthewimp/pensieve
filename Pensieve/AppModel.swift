@@ -15,6 +15,7 @@ final class AppModel: ObservableObject {
     let localStore: LocalStore
     private let keychain: KeychainService
     private let llmProvider: LLMProvider
+    private let importService: SecondBrainImportService
     private var cancellables = Set<AnyCancellable>()
 
     init() {
@@ -24,6 +25,7 @@ final class AppModel: ObservableObject {
         self.keychain = keychain
         self.isAnthropicConfigured = keychain.hasAnthropicAPIKey()
         self.llmProvider = AnthropicProvider(keychain: keychain)
+        self.importService = SecondBrainImportService(store: store)
         self.captureService = CaptureService(
             store: store,
             llmProvider: llmProvider,
@@ -74,6 +76,12 @@ final class AppModel: ObservableObject {
         )
         await localStore.saveChatMessage(assistantMessage)
         await refresh()
+    }
+
+    func importSecondBrainRawFolder(_ folderURL: URL) async throws -> SecondBrainImportResult {
+        let result = try await importService.importRawFolder(folderURL)
+        await refresh()
+        return result
     }
 
     private func notesForQuery(_ query: String) -> [MemoryNote] {
