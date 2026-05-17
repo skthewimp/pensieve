@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var backupMessage: String?
     @State private var isPreparingBackup = false
     @State private var isShowingBackupExporter = false
+    @State private var analysisMessage: String?
+    @State private var isAnalyzing = false
 
     var body: some View {
         NavigationStack {
@@ -70,6 +72,24 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Analysis") {
+                    Button {
+                        generateContradictions()
+                    } label: {
+                        Label("Find Contradictions", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(isAnalyzing || appModel.notes.isEmpty)
+
+                    if isAnalyzing {
+                        ProgressView("Analyzing notes...")
+                    }
+
+                    if let analysisMessage {
+                        Text(analysisMessage)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section("Migration") {
                     Button {
                         isShowingImporter = true
@@ -116,6 +136,26 @@ struct SettingsView: View {
         } catch {
             saveMessage = nil
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func generateContradictions() {
+        isAnalyzing = true
+        analysisMessage = nil
+
+        Task {
+            do {
+                let savedCount = try await appModel.generateContradictions()
+                await MainActor.run {
+                    analysisMessage = savedCount == 0 ? "No new contradictions found." : "Added \(savedCount) contradictions."
+                    isAnalyzing = false
+                }
+            } catch {
+                await MainActor.run {
+                    analysisMessage = error.localizedDescription
+                    isAnalyzing = false
+                }
+            }
         }
     }
 

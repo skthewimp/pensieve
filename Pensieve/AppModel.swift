@@ -84,6 +84,21 @@ final class AppModel: ObservableObject {
         return result
     }
 
+    func generateContradictions() async throws -> Int {
+        let existing = await localStore.loadContradictions()
+        let existingFingerprints = Set(existing.map(Self.contradictionFingerprint))
+        let generated = try await llmProvider.findContradictions(in: notes)
+
+        var savedCount = 0
+        for contradiction in generated where !existingFingerprints.contains(Self.contradictionFingerprint(contradiction)) {
+            await localStore.saveContradiction(contradiction)
+            savedCount += 1
+        }
+
+        await refresh()
+        return savedCount
+    }
+
     func exportBackupData() async throws -> Data {
         try await localStore.exportBackupData()
     }
@@ -92,6 +107,14 @@ final class AppModel: ObservableObject {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HHmm"
         return "pensieve-backup-\(formatter.string(from: Date()))"
+    }
+
+    private static func contradictionFingerprint(_ contradiction: Contradiction) -> String {
+        [
+            contradiction.topic.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
+            contradiction.beforeNoteID?.uuidString ?? "",
+            contradiction.afterNoteID?.uuidString ?? ""
+        ].joined(separator: "|")
     }
 
     private func notesForQuery(_ query: String) -> [MemoryNote] {

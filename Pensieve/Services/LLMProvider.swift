@@ -23,6 +23,7 @@ struct ChatResponse {
 protocol LLMProvider {
     func processCapture(_ input: CaptureProcessingInput) async throws -> CaptureProcessingResult
     func chat(_ request: ChatRequest) async throws -> ChatResponse
+    func findContradictions(in notes: [MemoryNote]) async throws -> [Contradiction]
 }
 
 struct AnthropicProcessedNote: Codable {
@@ -32,6 +33,18 @@ struct AnthropicProcessedNote: Codable {
     let emotionalTone: String
     let keyQuotes: [String]
     let connections: [String]
+}
+
+struct AnthropicContradictionsResponse: Codable {
+    let contradictions: [AnthropicContradiction]
+}
+
+struct AnthropicContradiction: Codable {
+    let topic: String
+    let beforeNoteID: UUID?
+    let afterNoteID: UUID?
+    let explanation: String
+    let confidence: Double?
 }
 
 enum AnthropicError: LocalizedError {
@@ -157,6 +170,106 @@ struct AnthropicProvider: LLMProvider {
             answer: answer,
             contextNoteIDs: request.contextNotes.map(\.id)
         )
+    }
+
+    func findContradictions(in notes: [MemoryNote]) async throws -> [Contradiction] {
+        guard let apiKey = keychain.loadAnthropicAPIKey() else {
+            throw AnthropicError.apiKeyMissing
+        }
+
+        let noteDigest = notes
+            .sorted { $0.createdAt < $1.createdAt }
+            .map(Self.buildContradictionDigest)
+            .joined(separator: "\n\n---\n\n")
+
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 4096,
+            "system": """
+            You analyze a personal note corpus for meaningful contradictions, changed beliefs, recurring tensions, and shifts in priorities. Only return contradictions that are supported by the provided notes. Prefer concrete source-backed changes over vague psychological interpretation.
+
+            Return only a JSON object with this exact shape:
+            {
+              "contradictions": [
+                {
+                  "topic": "short topic",
+                  "beforeNoteID": "uuid of earlier note or null",
+                  "afterNoteID": "uuid of later note or null",
+                  "explanation": "one or two sentences explaining the tension or shift",
+                  "confidence": 0.0
+                }
+              ]
+            }
+
+            Rules:
+            - beforeNoteID and afterNoteID must be IDs from the supplied notes.
+            - Include at most 12 high-signal contradictions.
+            - Return an empty array if there is not enough evidence.
+            - confidence must be between 0 and 1.
+            """,
+            "messages": [
+                [
+                    "role": "user",
+                    "content": """
+                    Find the strongest contradictions or meaningful shifts in this note corpus:
+
+                    \(noteDigest.isEmpty ? "(no notes)" : noteDigest)
+                    """
+                ]
+            ]
+        ]
+
+        var urlRequest = URLRequest(url: baseURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.addValue(apiKey, forHTTPHeaderField: "x-api-key")
+        urlRequest.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "content-type")
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let responseBody = String(data: data, encoding: .utf8) ?? "no body"
+            throw AnthropicError.apiError(statusCode: statusCode, message: responseBody)
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let contentBlocks = json["content"] as? [[String: Any]] else {
+            throw AnthropicError.invalidJSON
+        }
+
+        let textOut = contentBlocks.compactMap { block -> String? in
+            guard (block["type"] as? String) == "text" else { return nil }
+            return block["text"] as? String
+        }.joined(separator: "\n\n")
+
+        let jsonString = extractJSON(from: textOut)
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw AnthropicError.invalidJSON
+        }
+
+        do {
+            let response = try JSONDecoder().decode(AnthropicContradictionsResponse.self, from: jsonData)
+            return response.contradictions
+                .filter { !$0.topic.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .filter { !$0.explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .map {
+                    Contradiction(
+                        id: UUID(),
+                        topic: $0.topic,
+                        beforeNoteID: $0.beforeNoteID,
+                        afterNoteID: $0.afterNoteID,
+                        explanation: $0.explanation,
+                        status: .unresolved,
+                        confidence: $0.confidence,
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                }
+        } catch {
+            throw AnthropicError.invalidJSON
+        }
     }
 
     private struct ProcessResult {
@@ -302,6 +415,26 @@ struct AnthropicProvider: LLMProvider {
             Fetch each URL and return the structured JSON.
             """
         }
+    }
+
+    private static func buildContradictionDigest(for note: MemoryNote) -> String {
+        let summary = note.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let excerpt = note.body
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .prefix(700)
+        let themes = note.themes.isEmpty ? "none" : note.themes.joined(separator: ", ")
+
+        return """
+        ID: \(note.id.uuidString)
+        Date: \(ISO8601DateFormatter().string(from: note.createdAt))
+        Title: \(note.title)
+        Themes: \(themes)
+        Tone: \(note.emotionalTone ?? "unknown")
+        Summary:
+        \(summary)
+        Excerpt:
+        \(excerpt)
+        """
     }
 
     private func buildNoteBody(input: CaptureProcessingInput, processed: AnthropicProcessedNote) -> String {
