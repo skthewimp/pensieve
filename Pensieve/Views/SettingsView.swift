@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
@@ -142,6 +143,7 @@ struct SettingsView: View {
     private func generateContradictions() {
         isAnalyzing = true
         analysisMessage = nil
+        UIApplication.shared.isIdleTimerDisabled = true
 
         Task {
             do {
@@ -149,11 +151,13 @@ struct SettingsView: View {
                 await MainActor.run {
                     analysisMessage = savedCount == 0 ? "No new contradictions found." : "Added \(savedCount) contradictions."
                     isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
                 }
             } catch {
                 await MainActor.run {
                     analysisMessage = error.localizedDescription
                     isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
                 }
             }
         }

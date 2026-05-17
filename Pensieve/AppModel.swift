@@ -87,7 +87,7 @@ final class AppModel: ObservableObject {
     func generateContradictions() async throws -> Int {
         let existing = await localStore.loadContradictions()
         let existingFingerprints = Set(existing.map(Self.contradictionFingerprint))
-        let generated = try await llmProvider.findContradictions(in: notes)
+        let generated = try await findContradictionsWithRetry()
 
         var savedCount = 0
         for contradiction in generated where !existingFingerprints.contains(Self.contradictionFingerprint(contradiction)) {
@@ -97,6 +97,15 @@ final class AppModel: ObservableObject {
 
         await refresh()
         return savedCount
+    }
+
+    private func findContradictionsWithRetry() async throws -> [Contradiction] {
+        do {
+            return try await llmProvider.findContradictions(in: notes)
+        } catch {
+            try await Task.sleep(nanoseconds: 1_500_000_000)
+            return try await llmProvider.findContradictions(in: notes)
+        }
     }
 
     func exportBackupData() async throws -> Data {
