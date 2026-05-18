@@ -99,6 +99,14 @@ final class AppModel: ObservableObject {
         return savedCount
     }
 
+    func updateContradiction(_ contradiction: Contradiction, status: ContradictionStatus) async {
+        var updated = contradiction
+        updated.status = status
+        updated.updatedAt = Date()
+        await localStore.saveContradiction(updated)
+        await refresh()
+    }
+
     private func findContradictionsWithRetry() async throws -> [Contradiction] {
         do {
             return try await llmProvider.findContradictions(in: notes)

@@ -1,5 +1,32 @@
 # Pensieve Dev Log
 
+## 2026-05-18 10:55 IST
+
+### User prompts
+
+> ok we paused work on this yesterdy. let's pick it up and make it more useful
+
+### Work done
+
+- Added an `Insights` tab that works locally over the imported/captured corpus.
+- Added live corpus metrics for note count, theme count, and open contradictions.
+- Added recurring theme and recently active theme sections.
+- Added heuristic open-loop and decision/plan sections from note text.
+- Surfaced unresolved contradictions inside Insights.
+- Turned Contradictions rows into navigable detail pages.
+- Added contradiction source-note drilldowns for earlier and later linked notes.
+- Added a segmented review control for unresolved/reviewed/dismissed status.
+- Regenerated the Xcode project so the new Swift file is included.
+- Updated `README.md` with the new behavior.
+
+### Verification
+
+Simulator build succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -destination 'generic/platform=iOS Simulator' build
+```
+
 ## 2026-05-17 13:55 IST
 
 ### User prompts
