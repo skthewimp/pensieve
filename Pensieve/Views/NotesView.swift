@@ -29,7 +29,7 @@ struct NotesView: View {
     }
 }
 
-private struct NoteDetailView: View {
+struct NoteDetailView: View {
     let note: MemoryNote
 
     var body: some View {

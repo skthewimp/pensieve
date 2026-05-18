@@ -14,7 +14,19 @@ struct InsightsView: View {
                     HStack(spacing: 12) {
                         InsightMetric(title: "Notes", value: "\(appModel.notes.count)", systemImage: "note.text")
                         InsightMetric(title: "Themes", value: "\(analyzer.themeSummaries.count)", systemImage: "tag")
-                        InsightMetric(title: "Open", value: "\(analyzer.openContradictionCount)", systemImage: "arrow.triangle.2.circlepath")
+                        InsightMetric(title: "Insights", value: "\(appModel.insights.count)", systemImage: "sparkles")
+                    }
+                }
+
+                if !appModel.insights.isEmpty {
+                    Section("Generated Insights") {
+                        ForEach(appModel.insights) { insight in
+                            NavigationLink {
+                                GeneratedInsightDetailView(insight: insight)
+                            } label: {
+                                GeneratedInsightRow(insight: insight)
+                            }
+                        }
                     }
                 }
 
@@ -129,6 +141,151 @@ private struct InsightMetric: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
+    }
+}
+
+private struct GeneratedInsightRow: View {
+    let insight: Insight
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(insight.kind.label, systemImage: systemImage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(insight.status.label)
+                    .font(.caption2)
+                    .foregroundStyle(statusColor)
+            }
+
+            Text(insight.title)
+                .font(.headline)
+
+            Text(insight.explanation)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+        }
+    }
+
+    private var systemImage: String {
+        switch insight.kind {
+        case .themeSummary:
+            return "tag"
+        case .pattern:
+            return "point.3.connected.trianglepath.dotted"
+        case .openLoop:
+            return "questionmark.circle"
+        case .question:
+            return "bubble.left"
+        case .decision:
+            return "checkmark.circle"
+        case .beliefShift:
+            return "arrow.triangle.2.circlepath"
+        }
+    }
+
+    private var statusColor: Color {
+        switch insight.status {
+        case .pending:
+            return .secondary
+        case .accepted:
+            return .green
+        case .dismissed:
+            return .secondary
+        case .important:
+            return .orange
+        case .superseded:
+            return .purple
+        }
+    }
+}
+
+private struct GeneratedInsightDetailView: View {
+    @EnvironmentObject private var appModel: AppModel
+    let insight: Insight
+
+    private var sourceNotes: [MemoryNote] {
+        let notesByID = Dictionary(uniqueKeysWithValues: appModel.notes.map { ($0.id, $0) })
+        return insight.sourceNoteIDs.compactMap { notesByID[$0] }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                LabeledContent("Type", value: insight.kind.label)
+                LabeledContent("Status", value: insight.status.label)
+                if let confidence = insight.confidence {
+                    LabeledContent("Confidence", value: confidence.formatted(.percent.precision(.fractionLength(0))))
+                }
+            }
+
+            Section("Insight") {
+                Text(insight.explanation)
+                    .textSelection(.enabled)
+
+                if !insight.themes.isEmpty {
+                    InsightThemeChips(items: insight.themes)
+                }
+            }
+
+            Section("Review") {
+                Button {
+                    Task { await appModel.updateInsight(insight, status: .accepted) }
+                } label: {
+                    Label("Accept", systemImage: "checkmark.circle")
+                }
+
+                Button {
+                    Task { await appModel.updateInsight(insight, status: .important) }
+                } label: {
+                    Label("Mark Important", systemImage: "star")
+                }
+
+                Button {
+                    Task { await appModel.updateInsight(insight, status: .dismissed) }
+                } label: {
+                    Label("Dismiss", systemImage: "xmark.circle")
+                }
+
+                Button {
+                    Task { await appModel.updateInsight(insight, status: .superseded) }
+                } label: {
+                    Label("Mark Superseded", systemImage: "arrow.uturn.forward.circle")
+                }
+            }
+
+            if !sourceNotes.isEmpty {
+                Section("Source Notes") {
+                    ForEach(sourceNotes) { note in
+                        NavigationLink {
+                            NoteDetailView(note: note)
+                        } label: {
+                            InsightNoteRow(note: note, systemImage: "note.text")
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(insight.title)
+    }
+}
+
+private struct InsightThemeChips: View {
+    let items: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(items, id: \.self) { item in
+                Text(item)
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.thinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
     }
 }
 

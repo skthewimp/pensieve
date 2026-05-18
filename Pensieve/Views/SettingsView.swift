@@ -15,6 +15,8 @@ struct SettingsView: View {
     @State private var backupMessage: String?
     @State private var isPreparingBackup = false
     @State private var isShowingBackupExporter = false
+    @State private var isShowingBackupImporter = false
+    @State private var isRestoringBackup = false
     @State private var analysisMessage: String?
     @State private var isAnalyzing = false
 
@@ -61,10 +63,21 @@ struct SettingsView: View {
                     } label: {
                         Label("Export Pensieve Backup", systemImage: "externaldrive")
                     }
-                    .disabled(isPreparingBackup)
+                    .disabled(isPreparingBackup || isRestoringBackup)
+
+                    Button {
+                        isShowingBackupImporter = true
+                    } label: {
+                        Label("Restore Pensieve Backup", systemImage: "arrow.clockwise.icloud")
+                    }
+                    .disabled(isPreparingBackup || isRestoringBackup)
 
                     if isPreparingBackup {
                         ProgressView("Preparing backup...")
+                    }
+
+                    if isRestoringBackup {
+                        ProgressView("Restoring backup...")
                     }
 
                     if let backupMessage {
@@ -74,6 +87,20 @@ struct SettingsView: View {
                 }
 
                 Section("Analysis") {
+                    Button {
+                        analyzeCorpus()
+                    } label: {
+                        Label("Analyze Corpus", systemImage: "sparkles")
+                    }
+                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isAnthropicConfigured)
+
+                    Button {
+                        cleanUpTopics()
+                    } label: {
+                        Label("Clean Up Topics", systemImage: "rectangle.3.group")
+                    }
+                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isAnthropicConfigured)
+
                     Button {
                         generateContradictions()
                     } label: {
@@ -125,6 +152,13 @@ struct SettingsView: View {
             ) { result in
                 handleBackupExport(result)
             }
+            .fileImporter(
+                isPresented: $isShowingBackupImporter,
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false
+            ) { result in
+                handleBackupRestore(result)
+            }
         }
     }
 
@@ -150,6 +184,52 @@ struct SettingsView: View {
                 let savedCount = try await appModel.generateContradictions()
                 await MainActor.run {
                     analysisMessage = savedCount == 0 ? "No new contradictions found." : "Added \(savedCount) contradictions."
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            } catch {
+                await MainActor.run {
+                    analysisMessage = error.localizedDescription
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            }
+        }
+    }
+
+    private func analyzeCorpus() {
+        isAnalyzing = true
+        analysisMessage = nil
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        Task {
+            do {
+                let savedCount = try await appModel.analyzeCorpus()
+                await MainActor.run {
+                    analysisMessage = savedCount == 0 ? "No new insights found." : "Added \(savedCount) insights."
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            } catch {
+                await MainActor.run {
+                    analysisMessage = error.localizedDescription
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            }
+        }
+    }
+
+    private func cleanUpTopics() {
+        isAnalyzing = true
+        analysisMessage = nil
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        Task {
+            do {
+                let result = try await appModel.cleanUpTopics()
+                await MainActor.run {
+                    analysisMessage = "Updated \(result.updatedNotes) notes and generated \(result.topics) topics."
                     isAnalyzing = false
                     UIApplication.shared.isIdleTimerDisabled = false
                 }
@@ -190,6 +270,40 @@ struct SettingsView: View {
         switch result {
         case .success:
             backupMessage = "Backup exported."
+        case .failure(let error):
+            backupMessage = error.localizedDescription
+        }
+    }
+
+    private func handleBackupRestore(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let backupURL = urls.first else { return }
+            isRestoringBackup = true
+            backupMessage = nil
+
+            Task {
+                do {
+                    let didStartAccess = backupURL.startAccessingSecurityScopedResource()
+                    defer {
+                        if didStartAccess {
+                            backupURL.stopAccessingSecurityScopedResource()
+                        }
+                    }
+
+                    let data = try Data(contentsOf: backupURL)
+                    try await appModel.restoreBackupData(data)
+                    await MainActor.run {
+                        backupMessage = "Backup restored."
+                        isRestoringBackup = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        backupMessage = error.localizedDescription
+                        isRestoringBackup = false
+                    }
+                }
+            }
         case .failure(let error):
             backupMessage = error.localizedDescription
         }

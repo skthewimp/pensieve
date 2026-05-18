@@ -1,5 +1,77 @@
 # Pensieve Dev Log
 
+## 2026-05-18 17:55 IST
+
+### User prompts
+
+> let's do some literature survey before we go ahead. tonnes of people seem to be building "second brain" kind of apps for themselves.
+
+> question - does pensieve as a standalone app make sense? or should it be a "servered" openclaw kind of app?
+
+> ok good. let's keep the local on-device iOS thing only then.
+
+> ok now based on the current product and literature survey, let's make a product plan
+
+> yeah we have way too many topics now. need one cleanup pass to clean them up. and then to generate proper topics.
+
+> ok it ran but is this sustainable? ideally need LLM for this
+
+> mindmap is not grouped
+
+> document properly and commit everything to git
+
+### Work done
+
+- Added `docs/second-brain-literature-survey.md` covering common second-brain app patterns, use cases, implementation approaches, and failure modes.
+- Added `PRODUCT_PLAN.md` with the local-first iOS product direction, non-goals, information architecture, roadmap, and success criteria.
+- Chose the standalone local iOS architecture over a hosted/servered OpenClaw-style app.
+- Added backup restore and backup schema versioning.
+- Added tappable Chat source citations that open referenced notes.
+- Added source-backed `Insight` persistence, corpus analysis, review statuses, and Insights UI.
+- Added source-backed `WikiTopic` persistence and generated Wiki topic pages.
+- Added manual `Settings -> Clean Up Topics`.
+- Iterated topic cleanup from timeout-prone all-in-one LLM calls to a staged flow:
+  - ask the LLM for a compact 8-16 topic taxonomy;
+  - assign all notes locally into that taxonomy;
+  - generate topic pages per topic;
+  - fall back to a bounded local taxonomy if the LLM taxonomy fails.
+- Fixed generated-topic assignment so every note is assigned into the LLM taxonomy instead of sparse representative groups.
+- Updated Mindmap to use generated Wiki topic buckets when available and sort groups by note count.
+- Installed the updated debug app on the connected iPhone.
+- Updated `README.md` and `PRODUCT_PLAN.md` with the current topic cleanup flow and next todo queue.
+
+### Current behavior
+
+- Heavy AI actions remain manual: `Analyze Corpus`, `Find Contradictions`, and `Clean Up Topics`.
+- Topic cleanup is LLM-assisted but bounded: one taxonomy call plus per-topic page generation.
+- Wiki shows generated topic pages after cleanup, with raw theme fallback.
+- Mindmap groups by generated topics after cleanup, with raw theme fallback.
+- Existing generated topics may need a rerun after assignment logic changes.
+
+### Verification
+
+Physical-device build succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -destination 'generic/platform=iOS' build
+```
+
+The debug app was installed on Karthik's connected iPhone with:
+
+```text
+xcrun devicectl device install app --device 00008110-000948390C6A801E /Users/Karthik/Library/Developer/Xcode/DerivedData/Pensieve-exjgoqfjmokqludlhbdjgmaokfcc/Build/Products/Debug-iphoneos/Pensieve.app
+```
+
+### Next todos
+
+- Add a topic cleanup preview before rewriting note themes.
+- Show cleanup diagnostics: LLM vs local fallback, updated note count, generated topic count, largest groups, and last run time.
+- Link topic pages to related insights and contradictions.
+- Add single-topic refresh.
+- Add a review workflow for pending insights, contradictions, topic updates, and open loops.
+- Improve retrieval with scoped chat filters and better local ranking.
+- Move storage from JSON to SQLite/GRDB or SwiftData once the product flow stabilizes.
+
 ## 2026-05-18 10:55 IST
 
 ### User prompts

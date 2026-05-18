@@ -4,6 +4,23 @@ struct MindmapView: View {
     @EnvironmentObject private var appModel: AppModel
 
     private var themeGroups: [(theme: String, notes: [MemoryNote])] {
+        if !appModel.wikiTopics.isEmpty {
+            let notesByID = Dictionary(uniqueKeysWithValues: appModel.notes.map { ($0.id, $0) })
+            return appModel.wikiTopics.map { topic in
+                (
+                    theme: topic.title,
+                    notes: topic.sourceNoteIDs.compactMap { notesByID[$0] }
+                )
+            }
+            .filter { !$0.notes.isEmpty }
+            .sorted {
+                if $0.notes.count == $1.notes.count {
+                    return $0.theme < $1.theme
+                }
+                return $0.notes.count > $1.notes.count
+            }
+        }
+
         let pairs = appModel.notes.flatMap { note in
             note.themes.map { ($0, note) }
         }

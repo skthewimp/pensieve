@@ -15,6 +15,26 @@ struct ChatView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text(message.content)
+
+                        let sourceNotes = notes(for: message)
+                        if !sourceNotes.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Sources")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                ForEach(sourceNotes) { note in
+                                    NavigationLink {
+                                        NoteDetailView(note: note)
+                                    } label: {
+                                        Label(note.title, systemImage: "note.text")
+                                            .font(.caption)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
                     }
                 }
 
@@ -61,5 +81,11 @@ struct ChatView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func notes(for message: ChatMessage) -> [MemoryNote] {
+        guard message.role == .assistant else { return [] }
+        let notesByID = Dictionary(uniqueKeysWithValues: appModel.notes.map { ($0.id, $0) })
+        return message.contextNoteIDs.compactMap { notesByID[$0] }
     }
 }

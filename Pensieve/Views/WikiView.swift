@@ -50,10 +50,43 @@ struct WikiView: View {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
+    private var filteredTopics: [WikiTopic] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return appModel.wikiTopics }
+
+        return appModel.wikiTopics.filter { topic in
+            let haystack = ([topic.title, topic.canonicalTheme, topic.summary, topic.currentUnderstanding] + topic.aliases + topic.recurringSubthemes + topic.openQuestions + topic.relatedThemes)
+                .joined(separator: " ")
+                .lowercased()
+            return haystack.contains(query)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                if !visibleThemeGroups.isEmpty {
+                if !filteredTopics.isEmpty {
+                    Section("Topics") {
+                        ForEach(filteredTopics) { topic in
+                            NavigationLink {
+                                WikiTopicView(topic: topic)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Label(topic.title, systemImage: "book.closed")
+                                        Spacer()
+                                        Text("\(topic.sourceNoteIDs.count)")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text(topic.summary)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                            }
+                        }
+                    }
+                } else if !visibleThemeGroups.isEmpty {
                     Section {
                         ForEach(visibleThemeGroups, id: \.theme) { group in
                             NavigationLink {
@@ -106,12 +139,72 @@ struct WikiView: View {
             .overlay {
                 if appModel.notes.isEmpty {
                     ContentUnavailableView("Wiki", systemImage: "books.vertical", description: Text("Imported and captured notes will appear here."))
-                } else if filteredNotes.isEmpty {
+                } else if filteredNotes.isEmpty && filteredTopics.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 }
             }
             .navigationTitle("Wiki")
         }
+    }
+}
+
+private struct WikiTopicView: View {
+    @EnvironmentObject private var appModel: AppModel
+    let topic: WikiTopic
+
+    private var sourceNotes: [MemoryNote] {
+        let notesByID = Dictionary(uniqueKeysWithValues: appModel.notes.map { ($0.id, $0) })
+        return topic.sourceNoteIDs.compactMap { notesByID[$0] }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Text(topic.currentUnderstanding)
+                    .textSelection(.enabled)
+
+                if !topic.aliases.isEmpty {
+                    LabeledContent("Aliases", value: topic.aliases.joined(separator: ", "))
+                }
+            } header: {
+                Text(topic.summary)
+            }
+
+            if !topic.recurringSubthemes.isEmpty {
+                Section("Recurring Subthemes") {
+                    ForEach(topic.recurringSubthemes, id: \.self) { subtheme in
+                        Text(subtheme)
+                    }
+                }
+            }
+
+            if !topic.openQuestions.isEmpty {
+                Section("Open Questions") {
+                    ForEach(topic.openQuestions, id: \.self) { question in
+                        Text(question)
+                    }
+                }
+            }
+
+            if !topic.relatedThemes.isEmpty {
+                Section("Related Topics") {
+                    ForEach(topic.relatedThemes, id: \.self) { theme in
+                        Text(theme.capitalized)
+                    }
+                }
+            }
+
+            Section("Source Notes") {
+                ForEach(sourceNotes) { note in
+                    NavigationLink {
+                        WikiNoteDetailView(note: note)
+                    } label: {
+                        WikiNoteRow(note: note)
+                    }
+                }
+            }
+        }
+        .navigationTitle(topic.title)
     }
 }
 

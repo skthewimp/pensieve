@@ -1,21 +1,47 @@
 import Foundation
 
 struct LocalStoreSnapshot: Codable {
+    static let currentSchemaVersion = 2
+
+    var schemaVersion: Int
     var captures: [Capture]
     var notes: [MemoryNote]
     var contradictions: [Contradiction]
+    var insights: [Insight]
+    var wikiTopics: [WikiTopic]
     var chatMessages: [ChatMessage]
 
     init(
+        schemaVersion: Int = Self.currentSchemaVersion,
         captures: [Capture] = [],
         notes: [MemoryNote] = [],
         contradictions: [Contradiction] = [],
+        insights: [Insight] = [],
+        wikiTopics: [WikiTopic] = [],
         chatMessages: [ChatMessage] = []
     ) {
+        self.schemaVersion = schemaVersion
         self.captures = captures
         self.notes = notes
         self.contradictions = contradictions
+        self.insights = insights
+        self.wikiTopics = wikiTopics
         self.chatMessages = chatMessages
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion, captures, notes, contradictions, insights, wikiTopics, chatMessages
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        captures = try container.decodeIfPresent([Capture].self, forKey: .captures) ?? []
+        notes = try container.decodeIfPresent([MemoryNote].self, forKey: .notes) ?? []
+        contradictions = try container.decodeIfPresent([Contradiction].self, forKey: .contradictions) ?? []
+        insights = try container.decodeIfPresent([Insight].self, forKey: .insights) ?? []
+        wikiTopics = try container.decodeIfPresent([WikiTopic].self, forKey: .wikiTopics) ?? []
+        chatMessages = try container.decodeIfPresent([ChatMessage].self, forKey: .chatMessages) ?? []
     }
 }
 
@@ -24,11 +50,17 @@ protocol LocalStore {
     func saveNote(_ note: MemoryNote) async
     func saveImported(capture: Capture, note: MemoryNote) async
     func saveContradiction(_ contradiction: Contradiction) async
+    func saveInsight(_ insight: Insight) async
+    func saveWikiTopic(_ topic: WikiTopic) async
+    func deleteWikiTopics() async
     func saveChatMessage(_ message: ChatMessage) async
     func exportBackupData() async throws -> Data
+    func restoreBackupData(_ data: Data) async throws
     func loadCaptures() async -> [Capture]
     func loadNotes() async -> [MemoryNote]
     func loadContradictions() async -> [Contradiction]
+    func loadInsights() async -> [Insight]
+    func loadWikiTopics() async -> [WikiTopic]
     func loadChatMessages() async -> [ChatMessage]
 }
 
@@ -98,13 +130,48 @@ actor FileLocalStore: LocalStore {
         persist()
     }
 
+    func saveInsight(_ insight: Insight) {
+        upsert(insight, into: &snapshot.insights)
+        snapshot.insights.sort { $0.createdAt > $1.createdAt }
+        persist()
+    }
+
+    func saveWikiTopic(_ topic: WikiTopic) {
+        if let index = snapshot.wikiTopics.firstIndex(where: { $0.canonicalTheme == topic.canonicalTheme }) {
+            snapshot.wikiTopics[index] = topic
+        } else {
+            snapshot.wikiTopics.insert(topic, at: 0)
+        }
+        snapshot.wikiTopics.sort { $0.sourceNoteIDs.count > $1.sourceNoteIDs.count }
+        persist()
+    }
+
+    func deleteWikiTopics() {
+        snapshot.wikiTopics = []
+        persist()
+    }
+
     func saveChatMessage(_ message: ChatMessage) {
         snapshot.chatMessages.append(message)
         persist()
     }
 
     func exportBackupData() throws -> Data {
-        try encoder.encode(snapshot)
+        var exportSnapshot = snapshot
+        exportSnapshot.schemaVersion = LocalStoreSnapshot.currentSchemaVersion
+        return try encoder.encode(exportSnapshot)
+    }
+
+    func restoreBackupData(_ data: Data) throws {
+        var restored = try decoder.decode(LocalStoreSnapshot.self, from: data)
+        restored.schemaVersion = LocalStoreSnapshot.currentSchemaVersion
+        restored.captures.sort { $0.createdAt > $1.createdAt }
+        restored.notes.sort { $0.createdAt > $1.createdAt }
+        restored.contradictions.sort { $0.createdAt > $1.createdAt }
+        restored.insights.sort { $0.createdAt > $1.createdAt }
+        restored.wikiTopics.sort { $0.sourceNoteIDs.count > $1.sourceNoteIDs.count }
+        snapshot = restored
+        persist()
     }
 
     func loadCaptures() -> [Capture] {
@@ -117,6 +184,14 @@ actor FileLocalStore: LocalStore {
 
     func loadContradictions() -> [Contradiction] {
         snapshot.contradictions
+    }
+
+    func loadInsights() -> [Insight] {
+        snapshot.insights
+    }
+
+    func loadWikiTopics() -> [WikiTopic] {
+        snapshot.wikiTopics
     }
 
     func loadChatMessages() -> [ChatMessage] {
@@ -155,6 +230,8 @@ actor InMemoryLocalStore: LocalStore {
     private var captures: [Capture] = []
     private var notes: [MemoryNote] = []
     private var contradictions: [Contradiction] = []
+    private var insights: [Insight] = []
+    private var wikiTopics: [WikiTopic] = []
     private var chatMessages: [ChatMessage] = []
 
     func saveCapture(_ capture: Capture) {
@@ -188,6 +265,22 @@ actor InMemoryLocalStore: LocalStore {
         upsert(contradiction, into: &contradictions)
     }
 
+    func saveInsight(_ insight: Insight) {
+        upsert(insight, into: &insights)
+    }
+
+    func saveWikiTopic(_ topic: WikiTopic) {
+        if let index = wikiTopics.firstIndex(where: { $0.canonicalTheme == topic.canonicalTheme }) {
+            wikiTopics[index] = topic
+        } else {
+            wikiTopics.insert(topic, at: 0)
+        }
+    }
+
+    func deleteWikiTopics() {
+        wikiTopics = []
+    }
+
     func saveChatMessage(_ message: ChatMessage) {
         chatMessages.append(message)
     }
@@ -201,9 +294,23 @@ actor InMemoryLocalStore: LocalStore {
                 captures: captures,
                 notes: notes,
                 contradictions: contradictions,
+                insights: insights,
+                wikiTopics: wikiTopics,
                 chatMessages: chatMessages
             )
         )
+    }
+
+    func restoreBackupData(_ data: Data) throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let restored = try decoder.decode(LocalStoreSnapshot.self, from: data)
+        captures = restored.captures.sorted { $0.createdAt > $1.createdAt }
+        notes = restored.notes.sorted { $0.createdAt > $1.createdAt }
+        contradictions = restored.contradictions.sorted { $0.createdAt > $1.createdAt }
+        insights = restored.insights.sorted { $0.createdAt > $1.createdAt }
+        wikiTopics = restored.wikiTopics.sorted { $0.sourceNoteIDs.count > $1.sourceNoteIDs.count }
+        chatMessages = restored.chatMessages
     }
 
     func loadCaptures() -> [Capture] {
@@ -216,6 +323,14 @@ actor InMemoryLocalStore: LocalStore {
 
     func loadContradictions() -> [Contradiction] {
         contradictions
+    }
+
+    func loadInsights() -> [Insight] {
+        insights
+    }
+
+    func loadWikiTopics() -> [WikiTopic] {
+        wikiTopics
     }
 
     func loadChatMessages() -> [ChatMessage] {
