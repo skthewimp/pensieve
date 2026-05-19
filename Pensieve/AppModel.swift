@@ -9,6 +9,7 @@ final class AppModel: ObservableObject {
     @Published var insights: [Insight] = []
     @Published var wikiTopics: [WikiTopic] = []
     @Published var chatMessages: [ChatMessage] = []
+    @Published var lastTopicCleanupDiagnostics: TopicCleanupDiagnostics?
     @Published var isAnthropicConfigured: Bool
 
     let audioRecorder = AudioRecorderService()
@@ -134,14 +135,79 @@ final class AppModel: ObservableObject {
         await refresh()
     }
 
-    func cleanUpTopics() async throws -> (updatedNotes: Int, topics: Int) {
-        let taxonomy = (try? await llmProvider.cleanUpTopics(notes)).flatMap { $0.topics.isEmpty ? nil : $0 }
-        let result = taxonomy.map { Self.buildTopicCleanup(from: notes, topics: $0.topics) }
-            ?? Self.buildLocalTopicCleanup(from: notes)
+    func prepareTopicCleanupPreview() async throws -> TopicCleanupPreview {
+        let (result, source, fallbackReason) = try await buildTopicCleanupPlan()
+        return TopicCleanupPreview(
+            result: result,
+            diagnostics: Self.topicCleanupDiagnostics(
+                for: result,
+                notes: notes,
+                source: source,
+                fallbackReason: fallbackReason,
+                runAt: Date()
+            )
+        )
+    }
+
+    func applyTopicCleanupPreview(_ preview: TopicCleanupPreview) async throws -> TopicCleanupDiagnostics {
+        let diagnostics = try await applyTopicCleanupResult(preview.result, source: preview.diagnostics.source)
+        lastTopicCleanupDiagnostics = diagnostics
+        return diagnostics
+    }
+
+    func cleanUpTopics() async throws -> TopicCleanupDiagnostics {
+        let preview = try await prepareTopicCleanupPreview()
+        return try await applyTopicCleanupPreview(preview)
+    }
+
+    func refreshWikiTopic(_ topic: WikiTopic) async throws {
+        let notesByID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
+        let topicNotes = topic.sourceNoteIDs.compactMap { notesByID[$0] }
+        var refreshedTopic = try await llmProvider.generateWikiTopicPage(topic: topic, notes: topicNotes)
+        refreshedTopic.status = .pending
+        await localStore.saveWikiTopic(refreshedTopic)
+        await refresh()
+    }
+
+    func updateWikiTopic(_ topic: WikiTopic, status: WikiTopicStatus) async {
+        var updated = topic
+        updated.status = status
+        updated.updatedAt = Date()
+        await localStore.saveWikiTopic(updated)
+        await refresh()
+    }
+
+    private func buildTopicCleanupPlan() async throws -> (result: TopicCleanupResult, source: TopicCleanupSource, fallbackReason: String?) {
+        do {
+            let taxonomy = try await llmProvider.cleanUpTopics(notes)
+            if !taxonomy.topics.isEmpty {
+                return (Self.buildTopicCleanup(from: notes, topics: taxonomy.topics), .llm, nil)
+            }
+
+            return (
+                Self.buildLocalTopicCleanup(from: notes),
+                .localFallback,
+                "Anthropic returned no usable topics."
+            )
+        } catch {
+            return (
+                Self.buildLocalTopicCleanup(from: notes),
+                .localFallback,
+                error.localizedDescription
+            )
+        }
+    }
+
+    private func applyTopicCleanupResult(_ result: TopicCleanupResult, source: TopicCleanupSource) async throws -> TopicCleanupDiagnostics {
+        let diagnostics = Self.topicCleanupDiagnostics(
+            for: result,
+            notes: notes,
+            source: source,
+            runAt: Date()
+        )
         let notesByID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
         let assignmentByNoteID = Dictionary(uniqueKeysWithValues: result.assignments.map { ($0.noteID, $0.themes) })
 
-        var updatedNotes = 0
         for noteID in notesByID.keys {
             guard var note = notesByID[noteID] else { continue }
             let assignedThemes = assignmentByNoteID[noteID] ?? ["general"]
@@ -150,7 +216,6 @@ final class AppModel: ObservableObject {
             note.themes = cleanedThemes
             note.updatedAt = Date()
             await localStore.saveNote(note)
-            updatedNotes += 1
         }
 
         await localStore.deleteWikiTopics()
@@ -163,7 +228,7 @@ final class AppModel: ObservableObject {
         }
 
         await refresh()
-        return (updatedNotes, result.topics.count)
+        return diagnostics
     }
 
     private func findContradictionsWithRetry() async throws -> [Contradiction] {
@@ -226,6 +291,40 @@ final class AppModel: ObservableObject {
         .sorted()
 
         return Array(uniqueThemes.prefix(4))
+    }
+
+    private static func topicCleanupDiagnostics(
+        for result: TopicCleanupResult,
+        notes: [MemoryNote],
+        source: TopicCleanupSource,
+        fallbackReason: String? = nil,
+        runAt: Date
+    ) -> TopicCleanupDiagnostics {
+        let notesByID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
+        let assignmentByNoteID = Dictionary(uniqueKeysWithValues: result.assignments.map { ($0.noteID, $0.themes) })
+        let updatedNoteCount = notes.reduce(0) { count, note in
+            let assignedThemes = assignmentByNoteID[note.id] ?? ["general"]
+            let normalizedThemes = Self.cleanedThemes(assignedThemes)
+            return note.themes == normalizedThemes ? count : count + 1
+        }
+        let largestGroups = result.topics
+            .map { TopicCleanupGroupSummary(theme: $0.canonicalTheme, noteCount: $0.sourceNoteIDs.filter { notesByID[$0] != nil }.count) }
+            .filter { $0.noteCount > 0 }
+            .sorted {
+                if $0.noteCount == $1.noteCount {
+                    return $0.theme < $1.theme
+                }
+                return $0.noteCount > $1.noteCount
+            }
+
+        return TopicCleanupDiagnostics(
+            source: source,
+            fallbackReason: fallbackReason,
+            updatedNoteCount: updatedNoteCount,
+            generatedTopicCount: result.topics.filter { !$0.sourceNoteIDs.isEmpty }.count,
+            largestGroups: Array(largestGroups.prefix(5)),
+            runAt: runAt
+        )
     }
 
     private static func buildLocalTopicCleanup(from notes: [MemoryNote]) -> TopicCleanupResult {

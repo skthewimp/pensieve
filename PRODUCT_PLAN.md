@@ -439,8 +439,9 @@ Features:
 - Wiki display for generated topic pages, with raw theme fallback. Done.
 - Mindmap grouping by generated topics, with raw theme fallback. Done.
 - Topic page view with summary, current understanding, sources, open questions, and related themes. Done.
-- Related insights and contradictions on topic pages. Next.
-- Topic cleanup preview/diagnostics before rewriting themes. Next.
+- Related insights and contradictions on topic pages. Done.
+- Topic cleanup preview/diagnostics before rewriting themes. Done.
+- Single-topic refresh from generated Wiki topic pages. Done.
 
 Why third:
 
@@ -452,12 +453,12 @@ Goal: make correction a core habit.
 
 Features:
 
-- Daily/weekly review screen or Insights section.
+- Daily/weekly review screen or Insights section. Started with a Review tab.
 - "New notes ready to analyze."
-- "Open loops to revisit."
-- "Contradictions to review."
-- "Topic pages changed."
-- Dismiss/accept/important actions everywhere.
+- "Open loops to revisit." Started with heuristic open-loop notes.
+- "Contradictions to review." Done for unresolved contradictions.
+- "Topic pages changed." Started with generated topic page queue.
+- Dismiss/accept/important actions everywhere. Done for insights and contradictions; topic pages now support useful/stale/needs refresh/dismissed.
 
 Why fourth:
 
@@ -538,7 +539,7 @@ Tasks:
 - Link topic pages to matching contradictions.
 - Show recently added source notes inside each topic.
 - Add topic-level review state: useful, stale, needs refresh, dismissed.
-- Add "refresh this topic" for a single topic instead of rerunning the whole corpus.
+- Add "refresh this topic" for a single topic instead of rerunning the whole corpus. Done.
 
 ### 3. Review Workflow
 
@@ -546,9 +547,9 @@ Goal: turn generated memory into a habit rather than a pile.
 
 Tasks:
 
-- Add a Review screen or Insights section for pending generated items.
-- Group pending items by type: insights, contradictions, stale topics, open loops.
-- Add accept/dismiss/important actions consistently across Insight, WikiTopic, and Contradiction surfaces.
+- Add a Review screen or Insights section for pending generated items. Done.
+- Group pending items by type: insights, contradictions, stale topics, open loops. Started.
+- Add accept/dismiss/important actions consistently across Insight, WikiTopic, and Contradiction surfaces. Partial: insights and contradictions have actions; WikiTopic needs status.
 - Add a weekly review action that produces a source-backed digest.
 
 ### 4. Retrieval Quality

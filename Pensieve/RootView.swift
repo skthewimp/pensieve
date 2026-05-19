@@ -23,6 +23,11 @@ struct RootView: View {
                     Label("Insights", systemImage: "chart.bar.doc.horizontal")
                 }
 
+            ReviewView()
+                .tabItem {
+                    Label("Review", systemImage: "checklist")
+                }
+
             ChatView()
                 .tabItem {
                     Label("Chat", systemImage: "bubble.left.and.bubble.right")

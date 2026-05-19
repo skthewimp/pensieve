@@ -33,6 +33,12 @@ struct MindmapView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("Summary") {
+                    LabeledContent("Groups", value: "\(themeGroups.count)")
+                    LabeledContent("Notes", value: "\(themeGroups.reduce(0) { $0 + $1.notes.count })")
+                    LabeledContent("Source", value: appModel.wikiTopics.isEmpty ? "Themes" : "Topic Pages")
+                }
+
                 ForEach(themeGroups, id: \.theme) { group in
                     Section {
                         ForEach(group.notes) { note in

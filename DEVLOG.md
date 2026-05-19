@@ -1,5 +1,58 @@
 # Pensieve Dev Log
 
+## 2026-05-19 14:20 IST
+
+### User prompts
+
+> yes start wroking thorugh the list of todos now.
+
+> full of unresolved contradictions on top. i dont know if i'll ever resolve them . nothing to "review"
+
+> ok go on
+
+### Work done
+
+- Split topic cleanup into a preview/apply flow so note themes are not rewritten immediately.
+- Added topic cleanup diagnostics in Settings:
+  - LLM taxonomy vs local fallback source;
+  - notes that would be updated;
+  - generated topic count;
+  - largest generated groups;
+  - run time.
+- Added related generated insights and related contradictions to generated Wiki topic pages.
+- Added single-topic refresh from a generated Wiki topic page.
+- Added a Review tab for pending insights, unresolved contradictions, generated topic pages, and likely open-loop notes.
+- Added swipe review actions for accepting/dismissing insights and reviewing/dismissing contradictions.
+- Moved contradictions to a limited `Tensions To Inspect` section at the bottom of Review and changed the action label to `Seen`.
+- Added topic-level review state: pending, useful, stale, needs refresh, dismissed.
+- Added topic review actions on Wiki topic pages and Review rows.
+- Regenerated the Xcode project so the new Review view is included.
+- Updated `README.md` and `PRODUCT_PLAN.md`.
+
+### Current behavior
+
+- `Settings -> Preview Topic Cleanup` builds a cleanup proposal and shows diagnostics.
+- `Apply Topic Cleanup` commits the preview by rewriting note themes and regenerating Wiki topics.
+- Wiki topic pages now show related insights and contradictions when they share source notes or topic terms.
+- Topic pages can be refreshed individually through the toolbar refresh button.
+- Review is now its own tab.
+- Topic pages stay in Review only when pending, stale, or needing refresh.
+- Contradictions no longer dominate Review and can stay unresolved.
+
+### Verification
+
+Simulator build succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -destination 'generic/platform=iOS Simulator' build
+```
+
+### Next todos
+
+- Add scoped chat filters by date, topic, source type, and review status.
+- Improve local note ranking beyond simple term matching.
+- Move storage from JSON to SQLite/GRDB or SwiftData once the product flow stabilizes.
+
 ## 2026-05-18 17:55 IST
 
 ### User prompts

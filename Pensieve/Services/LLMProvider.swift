@@ -65,7 +65,17 @@ struct AnthropicInsight: Codable {
 
 struct AnthropicTopicCleanupResponse: Codable {
     let topics: [AnthropicWikiTopic]
-    let noteThemeAssignments: [TopicThemeAssignment]
+    let noteThemeAssignments: [AnthropicTopicThemeAssignment]
+
+    enum CodingKeys: String, CodingKey {
+        case topics, noteThemeAssignments
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        topics = try container.decodeIfPresent([AnthropicWikiTopic].self, forKey: .topics) ?? []
+        noteThemeAssignments = try container.decodeIfPresent([AnthropicTopicThemeAssignment].self, forKey: .noteThemeAssignments) ?? []
+    }
 }
 
 struct AnthropicWikiTopic: Codable {
@@ -78,6 +88,41 @@ struct AnthropicWikiTopic: Codable {
     let openQuestions: [String]
     let sourceNoteIDs: [UUID]
     let relatedThemes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case title, canonicalTheme, aliases, summary, currentUnderstanding
+        case recurringSubthemes, openQuestions, sourceNoteIDs, relatedThemes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        canonicalTheme = try container.decodeIfPresent(String.self, forKey: .canonicalTheme) ?? ""
+        aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
+        summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        currentUnderstanding = try container.decodeIfPresent(String.self, forKey: .currentUnderstanding) ?? ""
+        recurringSubthemes = try container.decodeIfPresent([String].self, forKey: .recurringSubthemes) ?? []
+        openQuestions = try container.decodeIfPresent([String].self, forKey: .openQuestions) ?? []
+        relatedThemes = try container.decodeIfPresent([String].self, forKey: .relatedThemes) ?? []
+        let rawSourceIDs = try container.decodeIfPresent([String].self, forKey: .sourceNoteIDs) ?? []
+        sourceNoteIDs = rawSourceIDs.compactMap(UUID.init(uuidString:))
+    }
+}
+
+struct AnthropicTopicThemeAssignment: Codable {
+    let noteID: UUID?
+    let themes: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case noteID, themes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let rawNoteID = try container.decodeIfPresent(String.self, forKey: .noteID)
+        noteID = rawNoteID.flatMap(UUID.init(uuidString:))
+        themes = try container.decodeIfPresent([String].self, forKey: .themes) ?? []
+    }
 }
 
 struct AnthropicWikiTopicPageResponse: Codable {
@@ -93,7 +138,7 @@ enum AnthropicError: LocalizedError {
     case apiKeyMissing
     case apiError(statusCode: Int, message: String)
     case noTextInResponse
-    case invalidJSON
+    case invalidJSON(String = "Could not parse Anthropic response.")
 
     var errorDescription: String? {
         switch self {
@@ -103,15 +148,15 @@ enum AnthropicError: LocalizedError {
             return "Anthropic API error (\(statusCode)): \(message)"
         case .noTextInResponse:
             return "Anthropic returned no text response."
-        case .invalidJSON:
-            return "Could not parse Anthropic response."
+        case .invalidJSON(let message):
+            return message
         }
     }
 }
 
 struct AnthropicProvider: LLMProvider {
     private let keychain: KeychainService
-    private let model = "claude-sonnet-4-6"
+    private let model = "claude-sonnet-4-20250514"
     private let baseURL = URL(string: "https://api.anthropic.com/v1/messages")!
 
     init(keychain: KeychainService) {
@@ -196,7 +241,7 @@ struct AnthropicProvider: LLMProvider {
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let contentBlocks = json["content"] as? [[String: Any]] else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         let answer = contentBlocks.compactMap { block -> String? in
@@ -278,7 +323,7 @@ struct AnthropicProvider: LLMProvider {
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let contentBlocks = json["content"] as? [[String: Any]] else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         let textOut = contentBlocks.compactMap { block -> String? in
@@ -286,9 +331,9 @@ struct AnthropicProvider: LLMProvider {
             return block["text"] as? String
         }.joined(separator: "\n\n")
 
-        let jsonString = extractJSON(from: textOut)
+        let jsonString = Self.extractJSON(from: textOut)
         guard let jsonData = jsonString.data(using: .utf8) else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         do {
@@ -310,7 +355,7 @@ struct AnthropicProvider: LLMProvider {
                     )
                 }
         } catch {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
     }
 
@@ -390,7 +435,7 @@ struct AnthropicProvider: LLMProvider {
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let contentBlocks = json["content"] as? [[String: Any]] else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         let textOut = contentBlocks.compactMap { block -> String? in
@@ -398,9 +443,9 @@ struct AnthropicProvider: LLMProvider {
             return block["text"] as? String
         }.joined(separator: "\n\n")
 
-        let jsonString = extractJSON(from: textOut)
+        let jsonString = Self.extractJSON(from: textOut)
         guard let jsonData = jsonString.data(using: .utf8) else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         do {
@@ -424,7 +469,7 @@ struct AnthropicProvider: LLMProvider {
                 }
                 .filter { !$0.sourceNoteIDs.isEmpty }
         } catch {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
     }
 
@@ -433,18 +478,16 @@ struct AnthropicProvider: LLMProvider {
             throw AnthropicError.apiKeyMissing
         }
 
-        let noteDigests = notes
-            .sorted { $0.createdAt > $1.createdAt }
-            .prefix(80)
+        let noteDigests = Self.topicCleanupSample(from: notes, limit: 24)
             .map(Self.buildTopicCleanupDigest)
             .joined(separator: "\n\n---\n\n")
         let themeDigest = Self.buildThemeDigest(from: notes)
 
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": 4096,
+            "max_tokens": 2400,
             "system": """
-            You clean up topics for a local-first personal memory app called Pensieve. The current notes have too many overlapping themes. Consolidate them into a smaller canonical topic set. Do not write full topic pages in this pass.
+            You clean up topics for a local-first personal memory app called Pensieve. The current notes have too many overlapping themes. Consolidate them into a smaller canonical topic set. This is a taxonomy-only pass. Keep the response compact.
 
             Return only a JSON object with this exact shape:
             {
@@ -453,10 +496,6 @@ struct AnthropicProvider: LLMProvider {
                   "title": "Career",
                   "canonicalTheme": "career",
                   "aliases": ["work", "consulting"],
-                  "summary": "",
-                  "currentUnderstanding": "",
-                  "recurringSubthemes": [],
-                  "openQuestions": [],
                   "sourceNoteIDs": ["uuid from supplied notes"],
                   "relatedThemes": ["money"]
                 }
@@ -470,7 +509,9 @@ struct AnthropicProvider: LLMProvider {
             - Merge near-duplicates such as work/career/consulting when they are serving the same role.
             - Split only when notes clearly represent different recurring concerns.
             - Do not assign themes note-by-note. Return an empty noteThemeAssignments array.
-            - sourceNoteIDs should contain 2 to 8 representative IDs from the supplied note sample.
+            - sourceNoteIDs must use only IDs from the supplied note sample.
+            - sourceNoteIDs should contain 1 to 4 representative IDs from the supplied note sample.
+            - Do not include summaries, explanations, currentUnderstanding, recurringSubthemes, or openQuestions.
             - Do not invent details not supported by the notes.
             - Return only JSON, with no markdown or extra prose.
             """,
@@ -489,6 +530,7 @@ struct AnthropicProvider: LLMProvider {
         ]
 
         var urlRequest = URLRequest(url: baseURL)
+        urlRequest.timeoutInterval = 180
         urlRequest.httpMethod = "POST"
         urlRequest.addValue(apiKey, forHTTPHeaderField: "x-api-key")
         urlRequest.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
@@ -505,7 +547,7 @@ struct AnthropicProvider: LLMProvider {
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let contentBlocks = json["content"] as? [[String: Any]] else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         let textOut = contentBlocks.compactMap { block -> String? in
@@ -513,52 +555,7 @@ struct AnthropicProvider: LLMProvider {
             return block["text"] as? String
         }.joined(separator: "\n\n")
 
-        let jsonString = extractJSON(from: textOut)
-        guard let jsonData = jsonString.data(using: .utf8) else {
-            throw AnthropicError.invalidJSON
-        }
-
-        do {
-            let validNoteIDs = Set(notes.map(\.id))
-            let response = try JSONDecoder().decode(AnthropicTopicCleanupResponse.self, from: jsonData)
-            let canonicalThemes = Set(response.topics.map { Self.normalizedTheme($0.canonicalTheme) }.filter { !$0.isEmpty })
-            let topics = response.topics.compactMap { raw -> WikiTopic? in
-                let canonicalTheme = Self.normalizedTheme(raw.canonicalTheme)
-                let sourceNoteIDs = raw.sourceNoteIDs.filter { validNoteIDs.contains($0) }
-                guard !canonicalTheme.isEmpty, !raw.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !sourceNoteIDs.isEmpty else {
-                    return nil
-                }
-
-                return WikiTopic(
-                    title: raw.title,
-                    canonicalTheme: canonicalTheme,
-                    aliases: raw.aliases.map(Self.normalizedTheme).filter { !$0.isEmpty && $0 != canonicalTheme },
-                    summary: raw.summary,
-                    currentUnderstanding: raw.currentUnderstanding,
-                    recurringSubthemes: raw.recurringSubthemes.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
-                    openQuestions: raw.openQuestions.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty },
-                    sourceNoteIDs: sourceNoteIDs,
-                    relatedThemes: raw.relatedThemes.map(Self.normalizedTheme).filter { !$0.isEmpty },
-                    createdAt: Date(),
-                    updatedAt: Date()
-                )
-            }
-
-            let assignments = response.noteThemeAssignments.compactMap { assignment -> TopicThemeAssignment? in
-                guard validNoteIDs.contains(assignment.noteID) else { return nil }
-                let themes = assignment.themes
-                    .map(Self.normalizedTheme)
-                    .filter { canonicalThemes.contains($0) }
-                let uniqueThemes = Array(Set(themes)).sorted()
-                let cleaned = Array(uniqueThemes.prefix(4))
-                guard !cleaned.isEmpty else { return nil }
-                return TopicThemeAssignment(noteID: assignment.noteID, themes: cleaned)
-            }
-
-            return TopicCleanupResult(topics: topics, assignments: assignments)
-        } catch {
-            throw AnthropicError.invalidJSON
-        }
+        return try Self.parseTopicCleanupResponse(textOut, validNoteIDs: Set(notes.map(\.id)))
     }
 
     func generateWikiTopicPage(topic: WikiTopic, notes: [MemoryNote]) async throws -> WikiTopic {
@@ -626,7 +623,7 @@ struct AnthropicProvider: LLMProvider {
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let contentBlocks = json["content"] as? [[String: Any]] else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         let textOut = contentBlocks.compactMap { block -> String? in
@@ -634,9 +631,9 @@ struct AnthropicProvider: LLMProvider {
             return block["text"] as? String
         }.joined(separator: "\n\n")
 
-        let jsonString = extractJSON(from: textOut)
+        let jsonString = Self.extractJSON(from: textOut)
         guard let jsonData = jsonString.data(using: .utf8) else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         do {
@@ -651,7 +648,7 @@ struct AnthropicProvider: LLMProvider {
             updated.updatedAt = Date()
             return updated
         } catch {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
     }
 
@@ -701,7 +698,7 @@ struct AnthropicProvider: LLMProvider {
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let contentBlocks = json["content"] as? [[String: Any]] else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         var textOut: String?
@@ -729,9 +726,9 @@ struct AnthropicProvider: LLMProvider {
         }
 
         guard let textOut else { throw AnthropicError.noTextInResponse }
-        let jsonString = extractJSON(from: textOut)
+        let jsonString = Self.extractJSON(from: textOut)
         guard let jsonData = jsonString.data(using: .utf8) else {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
 
         do {
@@ -739,7 +736,7 @@ struct AnthropicProvider: LLMProvider {
             let fetched = kind == .url && !urls.isEmpty ? anyFetchAttempted && !anyFetchFailed : nil
             return ProcessResult(note: note, articleFetched: fetched)
         } catch {
-            throw AnthropicError.invalidJSON
+            throw AnthropicError.invalidJSON()
         }
     }
 
@@ -844,7 +841,7 @@ struct AnthropicProvider: LLMProvider {
         let summary = note.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         let excerpt = note.body
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .prefix(350)
+            .prefix(160)
         let themes = note.themes.isEmpty ? "none" : note.themes.joined(separator: ", ")
 
         return """
@@ -890,9 +887,45 @@ struct AnthropicProvider: LLMProvider {
             }
             return $0.count > $1.count
         }
-        .prefix(120)
+            .prefix(60)
 
         return counts.map { "- \($0.theme): \($0.count)" }.joined(separator: "\n")
+    }
+
+    private static func topicCleanupSample(from notes: [MemoryNote], limit: Int) -> [MemoryNote] {
+        let sortedNotes = notes.sorted { $0.createdAt > $1.createdAt }
+        let topThemes = Set(
+            Dictionary(grouping: notes.flatMap(\.themes).map(normalizedTheme).filter { !$0.isEmpty }, by: { $0 })
+                .map { (theme: $0.key, count: $0.value.count) }
+                .sorted {
+                    if $0.count == $1.count {
+                        return $0.theme < $1.theme
+                    }
+                    return $0.count > $1.count
+                }
+                .prefix(limit)
+                .map(\.theme)
+        )
+
+        var selected: [MemoryNote] = []
+        var selectedIDs = Set<UUID>()
+
+        for theme in topThemes {
+            guard let note = sortedNotes.first(where: { note in
+                note.themes.map(normalizedTheme).contains(theme) && !selectedIDs.contains(note.id)
+            }) else { continue }
+            selected.append(note)
+            selectedIDs.insert(note.id)
+            if selected.count >= limit { return selected }
+        }
+
+        for note in sortedNotes where !selectedIDs.contains(note.id) {
+            selected.append(note)
+            selectedIDs.insert(note.id)
+            if selected.count >= limit { break }
+        }
+
+        return selected
     }
 
     private static func normalizedTheme(_ theme: String) -> String {
@@ -928,12 +961,151 @@ struct AnthropicProvider: LLMProvider {
         """
     }
 
-    private func extractJSON(from text: String) -> String {
+    private static func parseTopicCleanupResponse(_ text: String, validNoteIDs: Set<UUID>) throws -> TopicCleanupResult {
+        let jsonString = Self.extractJSON(from: text)
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw AnthropicError.invalidJSON("Anthropic response was not valid UTF-8 JSON.")
+        }
+
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: jsonData)
+        } catch {
+            throw AnthropicError.invalidJSON("Anthropic returned malformed JSON: \(shortDebugDescription(error.localizedDescription)).")
+        }
+
+        let topicDictionaries: [[String: Any]]
+        let assignmentDictionaries: [[String: Any]]
+
+        if let dictionary = object as? [String: Any] {
+            topicDictionaries = firstArray(in: dictionary, keys: ["topics", "canonicalTopics", "wikiTopics"])
+            assignmentDictionaries = firstArray(in: dictionary, keys: ["noteThemeAssignments", "assignments", "themeAssignments"])
+        } else if let array = object as? [[String: Any]] {
+            topicDictionaries = array
+            assignmentDictionaries = []
+        } else {
+            throw AnthropicError.invalidJSON("Anthropic JSON was neither an object nor a topic array.")
+        }
+
+        let topics = topicDictionaries.compactMap { raw -> WikiTopic? in
+            let canonicalTheme = normalizedTheme(firstString(in: raw, keys: ["canonicalTheme", "canonical_theme", "theme", "slug"]))
+            let title = firstString(in: raw, keys: ["title", "name"]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let sourceNoteIDs = firstUUIDArray(in: raw, keys: ["sourceNoteIDs", "sourceNoteIds", "source_note_ids", "noteIDs", "noteIds", "note_ids"])
+                .filter { validNoteIDs.contains($0) }
+            guard !canonicalTheme.isEmpty, !title.isEmpty else { return nil }
+
+            let summary = firstString(in: raw, keys: ["summary", "description"])
+            let currentUnderstanding = firstString(in: raw, keys: ["currentUnderstanding", "current_understanding", "understanding"])
+
+            return WikiTopic(
+                title: title,
+                canonicalTheme: canonicalTheme,
+                aliases: firstStringArray(in: raw, keys: ["aliases", "alternateNames", "alternate_names"])
+                    .map(normalizedTheme)
+                    .filter { !$0.isEmpty && $0 != canonicalTheme },
+                summary: summary.isEmpty ? "Notes grouped around \(canonicalTheme)." : summary,
+                currentUnderstanding: currentUnderstanding.isEmpty ? (summary.isEmpty ? "Notes grouped around \(canonicalTheme)." : summary) : currentUnderstanding,
+                recurringSubthemes: firstStringArray(in: raw, keys: ["recurringSubthemes", "recurring_subthemes", "subthemes"]),
+                openQuestions: firstStringArray(in: raw, keys: ["openQuestions", "open_questions", "questions"]),
+                sourceNoteIDs: sourceNoteIDs,
+                relatedThemes: firstStringArray(in: raw, keys: ["relatedThemes", "related_themes", "related"])
+                    .map(normalizedTheme)
+                    .filter { !$0.isEmpty },
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+        }
+
+        guard !topics.isEmpty else {
+            throw AnthropicError.invalidJSON("Anthropic JSON contained no usable topics.")
+        }
+
+        let canonicalThemes = Set(topics.map(\.canonicalTheme))
+        let assignments = assignmentDictionaries.compactMap { raw -> TopicThemeAssignment? in
+            guard let noteID = firstUUID(in: raw, keys: ["noteID", "noteId", "note_id"]), validNoteIDs.contains(noteID) else { return nil }
+            let cleaned = cleanedTopicThemes(firstStringArray(in: raw, keys: ["themes", "canonicalThemes", "canonical_themes"]))
+                .filter { canonicalThemes.contains($0) }
+            guard !cleaned.isEmpty else { return nil }
+            return TopicThemeAssignment(noteID: noteID, themes: cleaned)
+        }
+
+        return TopicCleanupResult(topics: topics, assignments: assignments)
+    }
+
+    private static func firstArray(in dictionary: [String: Any], keys: [String]) -> [[String: Any]] {
+        for key in keys {
+            if let value = dictionary[key] as? [[String: Any]] {
+                return value
+            }
+        }
+        return []
+    }
+
+    private static func firstString(in dictionary: [String: Any], keys: [String]) -> String {
+        for key in keys {
+            if let value = dictionary[key] as? String {
+                return value
+            }
+        }
+        return ""
+    }
+
+    private static func firstStringArray(in dictionary: [String: Any], keys: [String]) -> [String] {
+        for key in keys {
+            if let values = dictionary[key] as? [String] {
+                return values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            }
+            if let value = dictionary[key] as? String {
+                return value
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }
+        }
+        return []
+    }
+
+    private static func firstUUIDArray(in dictionary: [String: Any], keys: [String]) -> [UUID] {
+        firstStringArray(in: dictionary, keys: keys).compactMap(UUID.init(uuidString:))
+    }
+
+    private static func firstUUID(in dictionary: [String: Any], keys: [String]) -> UUID? {
+        for key in keys {
+            if let value = dictionary[key] as? String, let id = UUID(uuidString: value) {
+                return id
+            }
+        }
+        return nil
+    }
+
+    private static func cleanedTopicThemes(_ themes: [String]) -> [String] {
+        let uniqueThemes = Set(themes.map(normalizedTheme).filter { !$0.isEmpty })
+        return Array(Array(uniqueThemes).sorted().prefix(4))
+    }
+
+    private static func shortDebugDescription(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.prefix(240))
+    }
+
+    private static func extractJSON(from text: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmed.hasPrefix("```") {
             let lines = trimmed.components(separatedBy: "\n")
             return lines.dropFirst().dropLast().joined(separator: "\n")
+        }
+
+        let objectStart = trimmed.firstIndex(of: "{")
+        let arrayStart = trimmed.firstIndex(of: "[")
+        let start = [objectStart, arrayStart].compactMap { $0 }.min()
+        guard let start else { return trimmed }
+
+        if trimmed[start] == "{", let end = trimmed.lastIndex(of: "}"), start <= end {
+            return String(trimmed[start...end])
+        }
+        if trimmed[start] == "[", let end = trimmed.lastIndex(of: "]"), start <= end {
+            return String(trimmed[start...end])
         }
 
         return trimmed

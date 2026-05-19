@@ -3,25 +3,43 @@ import SwiftUI
 struct ContradictionsView: View {
     @EnvironmentObject private var appModel: AppModel
 
+    private var unresolvedCount: Int {
+        appModel.contradictions.filter { $0.status == .unresolved }.count
+    }
+
+    private var reviewedCount: Int {
+        appModel.contradictions.filter { $0.status == .reviewed }.count
+    }
+
     var body: some View {
         NavigationStack {
-            List(appModel.contradictions) { contradiction in
-                NavigationLink {
-                    ContradictionDetailView(contradiction: contradiction)
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(contradiction.topic)
-                                .font(.headline)
-                            Spacer()
-                            Text(contradiction.status.rawValue.capitalized)
-                                .font(.caption)
-                                .foregroundStyle(statusColor(contradiction.status))
+            List {
+                Section("Summary") {
+                    LabeledContent("Total", value: "\(appModel.contradictions.count)")
+                    LabeledContent("Unresolved", value: "\(unresolvedCount)")
+                    LabeledContent("Reviewed", value: "\(reviewedCount)")
+                }
+
+                Section("Tensions") {
+                    ForEach(appModel.contradictions) { contradiction in
+                        NavigationLink {
+                            ContradictionDetailView(contradiction: contradiction)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(contradiction.topic)
+                                        .font(.headline)
+                                    Spacer()
+                                    Text(contradiction.status.rawValue.capitalized)
+                                        .font(.caption)
+                                        .foregroundStyle(statusColor(contradiction.status))
+                                }
+                                Text(contradiction.explanation)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(3)
+                            }
                         }
-                        Text(contradiction.explanation)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(3)
                     }
                 }
             }

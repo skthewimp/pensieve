@@ -19,6 +19,7 @@ struct SettingsView: View {
     @State private var isRestoringBackup = false
     @State private var analysisMessage: String?
     @State private var isAnalyzing = false
+    @State private var topicCleanupPreview: TopicCleanupPreview?
 
     var body: some View {
         NavigationStack {
@@ -95,11 +96,37 @@ struct SettingsView: View {
                     .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isAnthropicConfigured)
 
                     Button {
-                        cleanUpTopics()
+                        prepareTopicCleanupPreview()
                     } label: {
-                        Label("Clean Up Topics", systemImage: "rectangle.3.group")
+                        Label("Preview Topic Cleanup", systemImage: "rectangle.3.group")
                     }
                     .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isAnthropicConfigured)
+
+                    if let topicCleanupPreview {
+                        TopicCleanupDiagnosticsView(
+                            title: "Cleanup Preview",
+                            diagnostics: topicCleanupPreview.diagnostics
+                        )
+
+                        Button {
+                            applyTopicCleanupPreview(topicCleanupPreview)
+                        } label: {
+                            Label("Apply Topic Cleanup", systemImage: "checkmark.circle")
+                        }
+                        .disabled(isAnalyzing)
+
+                        Button(role: .cancel) {
+                            self.topicCleanupPreview = nil
+                        } label: {
+                            Label("Discard Preview", systemImage: "xmark.circle")
+                        }
+                        .disabled(isAnalyzing)
+                    } else if let diagnostics = appModel.lastTopicCleanupDiagnostics {
+                        TopicCleanupDiagnosticsView(
+                            title: "Last Cleanup",
+                            diagnostics: diagnostics
+                        )
+                    }
 
                     Button {
                         generateContradictions()
@@ -220,16 +247,42 @@ struct SettingsView: View {
         }
     }
 
-    private func cleanUpTopics() {
+    private func prepareTopicCleanupPreview() {
+        isAnalyzing = true
+        analysisMessage = nil
+        topicCleanupPreview = nil
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        Task {
+            do {
+                let preview = try await appModel.prepareTopicCleanupPreview()
+                await MainActor.run {
+                    topicCleanupPreview = preview
+                    analysisMessage = "Topic cleanup preview ready."
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            } catch {
+                await MainActor.run {
+                    analysisMessage = error.localizedDescription
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            }
+        }
+    }
+
+    private func applyTopicCleanupPreview(_ preview: TopicCleanupPreview) {
         isAnalyzing = true
         analysisMessage = nil
         UIApplication.shared.isIdleTimerDisabled = true
 
         Task {
             do {
-                let result = try await appModel.cleanUpTopics()
+                let diagnostics = try await appModel.applyTopicCleanupPreview(preview)
                 await MainActor.run {
-                    analysisMessage = "Updated \(result.updatedNotes) notes and generated \(result.topics) topics."
+                    topicCleanupPreview = nil
+                    analysisMessage = "Updated \(diagnostics.updatedNoteCount) notes and generated \(diagnostics.generatedTopicCount) topics."
                     isAnalyzing = false
                     UIApplication.shared.isIdleTimerDisabled = false
                 }
@@ -333,5 +386,46 @@ struct SettingsView: View {
         case .failure(let error):
             importMessage = error.localizedDescription
         }
+    }
+}
+
+private struct TopicCleanupDiagnosticsView: View {
+    let title: String
+    let diagnostics: TopicCleanupDiagnostics
+
+    private var runDate: String {
+        diagnostics.runAt.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+
+            LabeledContent("Source", value: diagnostics.source.rawValue)
+            if let fallbackReason = diagnostics.fallbackReason, !fallbackReason.isEmpty {
+                Text(fallbackReason)
+                    .foregroundStyle(.secondary)
+            }
+            LabeledContent("Notes to update", value: "\(diagnostics.updatedNoteCount)")
+            LabeledContent("Topics", value: "\(diagnostics.generatedTopicCount)")
+            LabeledContent("Run time", value: runDate)
+
+            if !diagnostics.largestGroups.isEmpty {
+                Text("Largest groups")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(diagnostics.largestGroups) { group in
+                    HStack {
+                        Text(group.theme.capitalized)
+                        Spacer()
+                        Text("\(group.noteCount)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .font(.subheadline)
+        .padding(.vertical, 4)
     }
 }

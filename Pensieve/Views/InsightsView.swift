@@ -10,12 +10,15 @@ struct InsightsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
+                Section("Summary") {
                     HStack(spacing: 12) {
                         InsightMetric(title: "Notes", value: "\(appModel.notes.count)", systemImage: "note.text")
                         InsightMetric(title: "Themes", value: "\(analyzer.themeSummaries.count)", systemImage: "tag")
                         InsightMetric(title: "Insights", value: "\(appModel.insights.count)", systemImage: "sparkles")
                     }
+                    LabeledContent("Open Loops", value: "\(analyzer.openLoopNotes.count)")
+                    LabeledContent("Decisions", value: "\(analyzer.decisionNotes.count)")
+                    LabeledContent("Unresolved Tensions", value: "\(analyzer.unresolvedContradictions.count)")
                 }
 
                 if !appModel.insights.isEmpty {
@@ -202,7 +205,7 @@ private struct GeneratedInsightRow: View {
     }
 }
 
-private struct GeneratedInsightDetailView: View {
+struct GeneratedInsightDetailView: View {
     @EnvironmentObject private var appModel: AppModel
     let insight: Insight
 
@@ -294,9 +297,14 @@ private struct InsightThemeDetailView: View {
 
     var body: some View {
         List {
-            Section {
+            Section("Summary") {
                 LabeledContent("Notes", value: "\(theme.notes.count)")
                 LabeledContent("Recent", value: "\(theme.recentCount)")
+                if !theme.recentTitles.isEmpty {
+                    Text(theme.recentTitles)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Notes") {

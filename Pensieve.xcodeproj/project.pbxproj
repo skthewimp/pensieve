@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01E23F759694CDB7B77197CF /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 93B2E68B6582C9D10A7AF148 /* Assets.xcassets */; };
+		024B22529AAC2721355967D7 /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67EE35547065EAAB168052E /* ReviewView.swift */; };
 		038350E72146BD84714B4995 /* PensieveBackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62FD1227FDE9BE3F43007771 /* PensieveBackupDocument.swift */; };
 		1C3B13D5B30D69AD082C0436 /* MemoryNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8950EF02137FA8590114F088 /* MemoryNote.swift */; };
 		35A68C95B9FB50652FC8F943 /* WikiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80ACB8B71E886B920F29B2CA /* WikiView.swift */; };
@@ -56,6 +57,7 @@
 		8E95364957AAF6932FB51978 /* LocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalStore.swift; sourceTree = "<group>"; };
 		8FE8C3B834F78DCF56A564E2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		93B2E68B6582C9D10A7AF148 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A67EE35547065EAAB168052E /* ReviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewView.swift; sourceTree = "<group>"; };
 		AF18D86EE125C238961FF075 /* Pensieve.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Pensieve.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B22667F7C8E5FE144F7C9F5A /* CaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureService.swift; sourceTree = "<group>"; };
 		B293BA8A500B38FDE63668B4 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -96,6 +98,7 @@
 				E52153EF17DC2783FAD96981 /* InsightsView.swift */,
 				EDA8F5386AA953191124AF08 /* MindmapView.swift */,
 				3736955794D624A65AEF378D /* NotesView.swift */,
+				A67EE35547065EAAB168052E /* ReviewView.swift */,
 				1C2A537CA6F8F5837250CA4A /* SettingsView.swift */,
 				80ACB8B71E886B920F29B2CA /* WikiView.swift */,
 			);
@@ -248,6 +251,7 @@
 				36EC69CC2EE1F9D9C056E0B9 /* NotesView.swift in Sources */,
 				CABC875EB608965AFC828F4D /* PensieveApp.swift in Sources */,
 				038350E72146BD84714B4995 /* PensieveBackupDocument.swift in Sources */,
+				024B22529AAC2721355967D7 /* ReviewView.swift in Sources */,
 				F94562BCBB838C012A4BABFB /* RootView.swift in Sources */,
 				52E814AFF3C789C1F0A34506 /* SecondBrainImportService.swift in Sources */,
 				9BB3D5C0309FC9DC98F221C9 /* SettingsView.swift in Sources */,

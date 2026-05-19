@@ -3,19 +3,39 @@ import SwiftUI
 struct NotesView: View {
     @EnvironmentObject private var appModel: AppModel
 
+    private var themeCount: Int {
+        Set(appModel.notes.flatMap(\.themes)).count
+    }
+
+    private var latestDate: Date? {
+        appModel.notes.map(\.createdAt).max()
+    }
+
     var body: some View {
         NavigationStack {
-            List(appModel.notes) { note in
-                NavigationLink {
-                    NoteDetailView(note: note)
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(note.title)
-                            .font(.headline)
-                        Text(note.summary)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+            List {
+                Section("Summary") {
+                    LabeledContent("Notes", value: "\(appModel.notes.count)")
+                    LabeledContent("Themes", value: "\(themeCount)")
+                    if let latestDate {
+                        LabeledContent("Latest", value: latestDate.formatted(date: .abbreviated, time: .omitted))
+                    }
+                }
+
+                Section("Notes") {
+                    ForEach(appModel.notes) { note in
+                        NavigationLink {
+                            NoteDetailView(note: note)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(note.title)
+                                    .font(.headline)
+                                Text(note.summary)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
                     }
                 }
             }
