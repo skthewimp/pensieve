@@ -1,5 +1,75 @@
 # Pensieve Dev Log
 
+## 2026-05-20 22:55 IST - voice-lock-fix
+
+### User prompts
+
+> Finding one bug. When I try to record a very long voice note, the phone switches off sometime in the middle, and the screen switches off. I don't know if it is still continuing to listen.
+
+> ok install
+
+> update documetnation and github
+
+### Work done
+
+- Fixed long voice recordings being vulnerable to screen sleep by declaring the iOS audio background mode.
+- Updated `AudioRecorderService` to disable the idle timer only during active recording, restore the previous setting afterward, and keep active recording metadata inside the service.
+- Changed voice-note submission to use a finished recording result containing the recorder-owned URL and recorder-derived duration.
+- Built and installed the signed Debug app on `Karthik's iPhone`.
+- Documented the voice recording reliability behavior in `README.md`.
+
+## 2026-05-19 22:15 IST
+
+### User prompts
+
+> next task is to get this on to testflight
+
+> ok docuemnt everything. we'll continue tomorow
+
+### Work done
+
+- Prepared the app for TestFlight/App Store packaging.
+- Added a real iOS App Store icon asset and wired it into the app icon catalog:
+  `Pensieve/Assets.xcassets/AppIcon.appiconset/AppIcon.png`.
+- Verified the icon is App Store-valid: `1024 x 1024`, RGB, no alpha.
+- Created a Release iOS archive at `build/Pensieve.xcarchive`.
+- Confirmed the archive succeeds for bundle id `com.karthikshashidhar.pensieve`, version `0.1`, build `1`.
+- Attempted App Store Connect upload with an ignored local export options plist at
+  `build/ExportOptions.plist`.
+
+### Verification
+
+Release archive succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Release -destination generic/platform=iOS -archivePath build/Pensieve.xcarchive -allowProvisioningUpdates archive
+```
+
+The upload/export step failed with:
+
+```text
+No provider associated with App Store Connect user
+```
+
+### Current blocker
+
+Xcode can development-sign the app with team `DQ23J9RMB2`, but the Apple ID
+configured locally does not currently have an App Store Connect provider for
+uploading to TestFlight. Before retrying, sign into Xcode with an Apple ID that
+has App Store Connect access for team `DQ23J9RMB2`, accept pending Apple
+agreements if any, and ensure the app record exists in App Store Connect for
+`com.karthikshashidhar.pensieve`.
+
+### Resume tomorrow
+
+After fixing App Store Connect access, retry:
+
+```text
+xcodebuild -exportArchive -archivePath build/Pensieve.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/AppStoreUpload -allowProvisioningUpdates
+```
+
+If the archive needs to be rebuilt first, rerun the archive command above.
+
 ## 2026-05-19 14:20 IST
 
 ### User prompts

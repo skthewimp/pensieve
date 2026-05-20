@@ -7,7 +7,6 @@ struct CaptureView: View {
     @State private var urlNote = ""
     @State private var isSubmitting = false
     @State private var errorMessage: String?
-    @State private var currentAudioURL: URL?
 
     var body: some View {
         NavigationStack {
@@ -101,16 +100,14 @@ struct CaptureView: View {
         errorMessage = nil
 
         if appModel.audioRecorder.isRecording {
-            let duration = await MainActor.run {
+            guard let recording = await MainActor.run(body: {
                 appModel.audioRecorder.stopRecording()
-            }
-            guard let currentAudioURL else { return }
+            }) else { return }
 
             isSubmitting = true
             defer { isSubmitting = false }
             do {
-                try await appModel.captureService.submitVoice(audioURL: currentAudioURL, duration: duration)
-                self.currentAudioURL = nil
+                try await appModel.captureService.submitVoice(audioURL: recording.url, duration: recording.duration)
                 await appModel.refresh()
             } catch {
                 errorMessage = error.localizedDescription
@@ -125,7 +122,7 @@ struct CaptureView: View {
             return
         }
 
-        currentAudioURL = await MainActor.run {
+        _ = await MainActor.run {
             appModel.audioRecorder.startRecording()
         }
     }

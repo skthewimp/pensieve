@@ -12,7 +12,7 @@ Built and tested on a physical iPhone with bundle id
 
 Implemented:
 
-- Voice capture with local audio recording.
+- Voice capture with local audio recording that is resilient to screen lock.
 - On-device transcription via WhisperKit.
 - Text capture.
 - URL capture with Anthropic processing.
@@ -47,7 +47,7 @@ Not yet implemented:
 - Automatic contradiction scans after every capture/import.
 - Durable background processing.
 - True graph layout for the mindmap.
-- TestFlight/App Store packaging.
+- TestFlight/App Store upload.
 - OpenAI provider.
 
 ## How The App Works Today
@@ -87,6 +87,18 @@ Not yet implemented:
 Contradiction analysis is manual for now because it can be slow and costs API
 tokens. The current implementation keeps the screen awake while the analysis
 runs and retries once after a transient failure.
+
+### Voice Recording Reliability
+
+Voice capture uses `AVAudioRecorder` with an iOS audio background mode declared
+in `Info.plist`. While a recording is active, Pensieve disables the idle timer
+so iOS does not auto-lock the screen mid-note. When recording stops, the app
+restores the prior idle-timer setting and submits the saved `.m4a` file for
+on-device WhisperKit transcription.
+
+The final duration saved with a voice note comes from `AVAudioRecorder` itself,
+not from the SwiftUI display timer. This avoids truncated metadata if the UI
+timer pauses while the device locks, sleeps, or transitions between app states.
 
 ## App Screens
 
@@ -202,6 +214,82 @@ xcrun devicectl device process launch --device 00008110-000948390C6A801E com.kar
 
 If `devicectl` reports the device is locked, unlock the phone and open the app
 manually. The install can succeed even when command-line launch fails.
+
+## TestFlight Packaging
+
+Current release identifiers:
+
+- Bundle id: `com.karthikshashidhar.pensieve`
+- Apple team id: `DQ23J9RMB2`
+- Version: `0.1`
+- Build: `1`
+
+The App Store icon asset is present at:
+
+```text
+Pensieve/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+```
+
+It has been verified as `1024 x 1024`, RGB, with no alpha channel.
+
+Create a Release archive:
+
+```sh
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Release -destination generic/platform=iOS -archivePath build/Pensieve.xcarchive -allowProvisioningUpdates archive
+```
+
+The archive currently succeeds and is written to:
+
+```text
+build/Pensieve.xcarchive
+```
+
+Upload/export for App Store Connect uses a local ignored plist at:
+
+```text
+build/ExportOptions.plist
+```
+
+Current contents:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>destination</key>
+	<string>upload</string>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>teamID</key>
+	<string>DQ23J9RMB2</string>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>uploadSymbols</key>
+	<true/>
+</dict>
+</plist>
+```
+
+Retry the TestFlight upload with:
+
+```sh
+xcodebuild -exportArchive -archivePath build/Pensieve.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/AppStoreUpload -allowProvisioningUpdates
+```
+
+Current blocker:
+
+```text
+No provider associated with App Store Connect user
+```
+
+Xcode can development-sign the archive, but the Apple ID currently configured
+locally does not have an App Store Connect provider for upload. To continue,
+sign into Xcode with an Apple ID that has App Store Connect access for team
+`DQ23J9RMB2`, accept any pending Apple agreements, and make sure the app record
+exists in App Store Connect for `com.karthikshashidhar.pensieve`.
 
 ## Context
 

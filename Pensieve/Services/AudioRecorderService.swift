@@ -1,13 +1,21 @@
 import AVFoundation
 import Foundation
+import UIKit
 
 @MainActor
 final class AudioRecorderService: NSObject, ObservableObject {
+    struct FinishedRecording {
+        let url: URL
+        let duration: TimeInterval
+    }
+
     @Published var isRecording = false
     @Published var recordingDuration: TimeInterval = 0
 
     private var audioRecorder: AVAudioRecorder?
     private var recordingTimer: Timer?
+    private var currentRecordingURL: URL?
+    private var wasIdleTimerDisabled = false
     let recordingsDirectory: URL
 
     override init() {
@@ -36,7 +44,7 @@ final class AudioRecorderService: NSObject, ObservableObject {
         let audioSession = AVAudioSession.sharedInstance()
 
         do {
-            try audioSession.setCategory(.playAndRecord, mode: .default)
+            try audioSession.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth, .defaultToSpeaker])
             try audioSession.setActive(true)
 
             let audioURL = recordingsDirectory.appendingPathComponent("capture-\(Date().timeIntervalSince1970).m4a")
@@ -51,8 +59,11 @@ final class AudioRecorderService: NSObject, ObservableObject {
             audioRecorder?.delegate = self
             audioRecorder?.record()
 
+            currentRecordingURL = audioURL
             isRecording = true
             recordingDuration = 0
+            wasIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
+            UIApplication.shared.isIdleTimerDisabled = true
             recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     self?.recordingDuration = self?.audioRecorder?.currentTime ?? 0
@@ -61,19 +72,26 @@ final class AudioRecorderService: NSObject, ObservableObject {
 
             return audioURL
         } catch {
+            UIApplication.shared.isIdleTimerDisabled = wasIdleTimerDisabled
+            currentRecordingURL = nil
             print("Failed to start recording: \(error)")
             return nil
         }
     }
 
-    func stopRecording() -> TimeInterval {
-        let duration = recordingDuration
+    func stopRecording() -> FinishedRecording? {
+        let url = currentRecordingURL
+        let duration = audioRecorder?.currentTime ?? recordingDuration
         audioRecorder?.stop()
         recordingTimer?.invalidate()
         recordingTimer = nil
         isRecording = false
+        recordingDuration = duration
+        currentRecordingURL = nil
+        UIApplication.shared.isIdleTimerDisabled = wasIdleTimerDisabled
         try? AVAudioSession.sharedInstance().setActive(false)
-        return duration
+        guard let url else { return nil }
+        return FinishedRecording(url: url, duration: duration)
     }
 
     @objc private func handleInterruption(_ notification: Notification) {
