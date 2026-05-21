@@ -8,6 +8,7 @@ final class AppModel: ObservableObject {
     @Published var contradictions: [Contradiction] = []
     @Published var insights: [Insight] = []
     @Published var wikiTopics: [WikiTopic] = []
+    @Published var noteConnections: [NoteConnection] = []
     @Published var chatMessages: [ChatMessage] = []
     @Published var lastTopicCleanupDiagnostics: TopicCleanupDiagnostics?
     @Published var isAnthropicConfigured: Bool
@@ -44,6 +45,7 @@ final class AppModel: ObservableObject {
 
         Task {
             await refresh()
+            await runPeriodicBacklinkMaintenanceIfNeeded()
             await transcriptionService.loadModel()
         }
     }
@@ -54,6 +56,7 @@ final class AppModel: ObservableObject {
         contradictions = await localStore.loadContradictions()
         insights = await localStore.loadInsights()
         wikiTopics = await localStore.loadWikiTopics()
+        noteConnections = await localStore.loadNoteConnections()
         chatMessages = await localStore.loadChatMessages()
     }
 
@@ -123,6 +126,29 @@ final class AppModel: ObservableObject {
             savedCount += 1
         }
 
+        await refresh()
+        return savedCount
+    }
+
+    func generateWeeklyDigest() async throws -> Bool {
+        let digest = try await generateWeeklyDigestWithRetry()
+        await localStore.saveInsight(digest)
+        await refresh()
+        return true
+    }
+
+    func connectNotesRetrospectively() async throws -> Int {
+        let existing = await localStore.loadNoteConnections()
+        let existingFingerprints = Set(existing.map(Self.noteConnectionFingerprint))
+        let generated = try await generateNoteConnectionsWithRetry()
+
+        var savedCount = 0
+        for connection in generated where !existingFingerprints.contains(Self.noteConnectionFingerprint(connection)) {
+            await localStore.saveNoteConnection(connection)
+            savedCount += 1
+        }
+
+        UserDefaults.standard.set(Date(), forKey: Self.lastBacklinkMaintenanceKey)
         await refresh()
         return savedCount
     }
@@ -249,6 +275,24 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func generateWeeklyDigestWithRetry() async throws -> Insight {
+        do {
+            return try await llmProvider.generateWeeklyDigest(from: notes)
+        } catch {
+            try await Task.sleep(nanoseconds: 1_500_000_000)
+            return try await llmProvider.generateWeeklyDigest(from: notes)
+        }
+    }
+
+    private func generateNoteConnectionsWithRetry() async throws -> [NoteConnection] {
+        do {
+            return try await llmProvider.generateNoteConnections(from: notes)
+        } catch {
+            try await Task.sleep(nanoseconds: 1_500_000_000)
+            return try await llmProvider.generateNoteConnections(from: notes)
+        }
+    }
+
     func exportBackupData() async throws -> Data {
         try await localStore.exportBackupData()
     }
@@ -277,6 +321,14 @@ final class AppModel: ObservableObject {
             insight.kind.rawValue,
             insight.title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
             insight.sourceNoteIDs.map(\.uuidString).sorted().joined(separator: ",")
+        ].joined(separator: "|")
+    }
+
+    private static func noteConnectionFingerprint(_ connection: NoteConnection) -> String {
+        [
+            connection.kind.rawValue,
+            connection.title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
+            connection.sourceNoteIDs.map(\.uuidString).sorted().joined(separator: ",")
         ].joined(separator: "|")
     }
 
@@ -326,6 +378,22 @@ final class AppModel: ObservableObject {
             runAt: runAt
         )
     }
+
+    private func runPeriodicBacklinkMaintenanceIfNeeded() async {
+        guard isAnthropicConfigured, notes.count >= 2, Self.isBacklinkMaintenanceDue else { return }
+        _ = try? await connectNotesRetrospectively()
+    }
+
+    private static var isBacklinkMaintenanceDue: Bool {
+        guard let lastRun = UserDefaults.standard.object(forKey: lastBacklinkMaintenanceKey) as? Date else {
+            return true
+        }
+
+        let nextRun = Calendar.current.date(byAdding: .hour, value: 24, to: lastRun) ?? lastRun
+        return Date() >= nextRun
+    }
+
+    private static let lastBacklinkMaintenanceKey = "lastBacklinkMaintenanceAt"
 
     private static func buildLocalTopicCleanup(from notes: [MemoryNote]) -> TopicCleanupResult {
         let assignments = notes.map { note in
@@ -403,7 +471,7 @@ final class AppModel: ObservableObject {
             return alias.value
         }
 
-        return "ideas"
+        return "self-understanding"
     }
 
     private static func inferCanonicalThemes(for note: MemoryNote, topics: [WikiTopic]) -> [String] {
@@ -551,24 +619,35 @@ final class AppModel: ObservableObject {
     }
 
     private static let canonicalThemeAliases: [String: String] = [
-        "ai": "ai tools",
-        "artificial intelligence": "ai tools",
-        "llm": "ai tools",
-        "llms": "ai tools",
-        "tools": "ai tools",
-        "technology": "ai tools",
-        "tech": "ai tools",
-        "automation": "ai tools",
-        "software": "ai tools",
+        "ai": "technology",
+        "artificial intelligence": "technology",
+        "llm": "technology",
+        "llms": "technology",
+        "tools": "technology",
+        "technology": "technology",
+        "tech": "technology",
+        "automation": "technology",
+        "software": "technology",
+        "engineering": "technology",
+        "privacy": "technology",
+        "security": "technology",
         "app": "product",
         "career": "career",
         "work": "career",
         "consulting": "career",
         "freelance": "career",
         "job": "career",
+        "job search": "career",
         "business": "career",
         "client": "career",
         "babbage": "career",
+        "entrepreneurship": "career",
+        "startup": "career",
+        "startups": "career",
+        "sales": "career",
+        "leadership": "career",
+        "market": "career",
+        "networking": "career",
         "writing": "writing",
         "blog": "writing",
         "blogging": "writing",
@@ -584,6 +663,11 @@ final class AppModel: ObservableObject {
         "emotions": "health",
         "mood": "health",
         "fitness": "health",
+        "burnout": "health",
+        "therapy": "health",
+        "adhd": "health",
+        "energy": "health",
+        "mindfulness": "health",
         "sleep": "health",
         "money": "money",
         "finance": "money",
@@ -604,11 +688,17 @@ final class AppModel: ObservableObject {
         "focus": "productivity",
         "decision": "productivity",
         "decisions": "productivity",
+        "decision-making": "productivity",
+        "organization": "productivity",
+        "motivation": "productivity",
+        "balance": "productivity",
         "learning": "learning",
         "books": "learning",
         "reading": "learning",
         "research": "learning",
         "study": "learning",
+        "education": "learning",
+        "skills": "learning",
         "politics": "politics",
         "elections": "politics",
         "election": "politics",
@@ -626,6 +716,8 @@ final class AppModel: ObservableObject {
         "ux": "product",
         "feature": "product",
         "features": "product",
+        "projects": "product",
+        "systems": "product",
         "data": "data",
         "analysis": "data",
         "analytics": "data",
@@ -635,15 +727,39 @@ final class AppModel: ObservableObject {
         "ideas": "ideas",
         "idea": "ideas",
         "creativity": "ideas",
-        "reflection": "ideas",
-        "philosophy": "ideas"
+        "culture": "ideas",
+        "language": "ideas",
+        "philosophy": "ideas",
+        "strategy": "strategy",
+        "incentives": "strategy",
+        "economics": "strategy",
+        "identity": "self-understanding",
+        "self-awareness": "self-understanding",
+        "self-doubt": "self-understanding",
+        "confidence": "self-understanding",
+        "clarity": "self-understanding",
+        "growth": "self-understanding",
+        "patterns": "self-understanding",
+        "reflection": "self-understanding",
+        "psychology": "self-understanding",
+        "regret": "self-understanding",
+        "autonomy": "self-understanding",
+        "uncertainty": "self-understanding",
+        "ambition": "self-understanding",
+        "frustration": "self-understanding",
+        "communication": "relationships",
+        "boundaries": "relationships",
+        "collaboration": "relationships",
+        "parenting": "relationships",
+        "transition": "self-understanding",
+        "retrospective": "self-understanding"
     ]
 
     private static let localTextSignals: [String: String] = [
-        "claude": "ai tools",
-        "openai": "ai tools",
-        "chatgpt": "ai tools",
-        "codex": "ai tools",
+        "claude": "technology",
+        "openai": "technology",
+        "chatgpt": "technology",
+        "codex": "technology",
         "swift": "product",
         "ios": "product",
         "client": "career",
@@ -692,5 +808,24 @@ final class AppModel: ObservableObject {
             .map(\.note)
 
         return Array((matched.isEmpty ? notes : matched).prefix(8))
+    }
+}
+
+private extension MemoryNote {
+    var searchableText: String {
+        ([title, summary, body] + themes)
+            .joined(separator: " ")
+            .lowercased()
+    }
+}
+
+private extension Array where Element == MemoryNote {
+    func uniquedByID() -> [MemoryNote] {
+        var seen = Set<UUID>()
+        return filter { note in
+            guard !seen.contains(note.id) else { return false }
+            seen.insert(note.id)
+            return true
+        }
     }
 }

@@ -11,6 +11,7 @@
 		024B22529AAC2721355967D7 /* ReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67EE35547065EAAB168052E /* ReviewView.swift */; };
 		038350E72146BD84714B4995 /* PensieveBackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62FD1227FDE9BE3F43007771 /* PensieveBackupDocument.swift */; };
 		1C3B13D5B30D69AD082C0436 /* MemoryNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8950EF02137FA8590114F088 /* MemoryNote.swift */; };
+		1F10F1D84A6FEE580A6B10AF /* NoteConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC325484D99A5CFD7C9A0917 /* NoteConnection.swift */; };
 		35A68C95B9FB50652FC8F943 /* WikiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80ACB8B71E886B920F29B2CA /* WikiView.swift */; };
 		36EC69CC2EE1F9D9C056E0B9 /* NotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3736955794D624A65AEF378D /* NotesView.swift */; };
 		52E814AFF3C789C1F0A34506 /* SecondBrainImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95BBBF8A547A1EDA4136826 /* SecondBrainImportService.swift */; };
@@ -64,6 +65,7 @@
 		B497888D4CE811CD810C34CC /* WikiTopic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WikiTopic.swift; sourceTree = "<group>"; };
 		B9102511BF598A9CBE317B26 /* Contradiction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Contradiction.swift; sourceTree = "<group>"; };
 		CB3281070809C96F81F1BE3F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		DC325484D99A5CFD7C9A0917 /* NoteConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteConnection.swift; sourceTree = "<group>"; };
 		E52153EF17DC2783FAD96981 /* InsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsightsView.swift; sourceTree = "<group>"; };
 		EDA8F5386AA953191124AF08 /* MindmapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MindmapView.swift; sourceTree = "<group>"; };
 		F95BBBF8A547A1EDA4136826 /* SecondBrainImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecondBrainImportService.swift; sourceTree = "<group>"; };
@@ -135,6 +137,7 @@
 				B9102511BF598A9CBE317B26 /* Contradiction.swift */,
 				2C8658C33250B2FD883559FC /* Insight.swift */,
 				8950EF02137FA8590114F088 /* MemoryNote.swift */,
+				DC325484D99A5CFD7C9A0917 /* NoteConnection.swift */,
 				62FD1227FDE9BE3F43007771 /* PensieveBackupDocument.swift */,
 				B497888D4CE811CD810C34CC /* WikiTopic.swift */,
 			);
@@ -248,6 +251,7 @@
 				6F37C5442455571AFCBF0A68 /* LocalStore.swift in Sources */,
 				1C3B13D5B30D69AD082C0436 /* MemoryNote.swift in Sources */,
 				E5D96489EDEC7CB167CB84EF /* MindmapView.swift in Sources */,
+				1F10F1D84A6FEE580A6B10AF /* NoteConnection.swift in Sources */,
 				36EC69CC2EE1F9D9C056E0B9 /* NotesView.swift in Sources */,
 				CABC875EB608965AFC828F4D /* PensieveApp.swift in Sources */,
 				038350E72146BD84714B4995 /* PensieveBackupDocument.swift in Sources */,

@@ -1,7 +1,7 @@
 import Foundation
 
 struct LocalStoreSnapshot: Codable {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var schemaVersion: Int
     var captures: [Capture]
@@ -9,6 +9,7 @@ struct LocalStoreSnapshot: Codable {
     var contradictions: [Contradiction]
     var insights: [Insight]
     var wikiTopics: [WikiTopic]
+    var noteConnections: [NoteConnection]
     var chatMessages: [ChatMessage]
 
     init(
@@ -18,6 +19,7 @@ struct LocalStoreSnapshot: Codable {
         contradictions: [Contradiction] = [],
         insights: [Insight] = [],
         wikiTopics: [WikiTopic] = [],
+        noteConnections: [NoteConnection] = [],
         chatMessages: [ChatMessage] = []
     ) {
         self.schemaVersion = schemaVersion
@@ -26,11 +28,12 @@ struct LocalStoreSnapshot: Codable {
         self.contradictions = contradictions
         self.insights = insights
         self.wikiTopics = wikiTopics
+        self.noteConnections = noteConnections
         self.chatMessages = chatMessages
     }
 
     enum CodingKeys: String, CodingKey {
-        case schemaVersion, captures, notes, contradictions, insights, wikiTopics, chatMessages
+        case schemaVersion, captures, notes, contradictions, insights, wikiTopics, noteConnections, chatMessages
     }
 
     init(from decoder: Decoder) throws {
@@ -41,6 +44,7 @@ struct LocalStoreSnapshot: Codable {
         contradictions = try container.decodeIfPresent([Contradiction].self, forKey: .contradictions) ?? []
         insights = try container.decodeIfPresent([Insight].self, forKey: .insights) ?? []
         wikiTopics = try container.decodeIfPresent([WikiTopic].self, forKey: .wikiTopics) ?? []
+        noteConnections = try container.decodeIfPresent([NoteConnection].self, forKey: .noteConnections) ?? []
         chatMessages = try container.decodeIfPresent([ChatMessage].self, forKey: .chatMessages) ?? []
     }
 }
@@ -52,6 +56,7 @@ protocol LocalStore {
     func saveContradiction(_ contradiction: Contradiction) async
     func saveInsight(_ insight: Insight) async
     func saveWikiTopic(_ topic: WikiTopic) async
+    func saveNoteConnection(_ connection: NoteConnection) async
     func deleteWikiTopics() async
     func saveChatMessage(_ message: ChatMessage) async
     func exportBackupData() async throws -> Data
@@ -61,6 +66,7 @@ protocol LocalStore {
     func loadContradictions() async -> [Contradiction]
     func loadInsights() async -> [Insight]
     func loadWikiTopics() async -> [WikiTopic]
+    func loadNoteConnections() async -> [NoteConnection]
     func loadChatMessages() async -> [ChatMessage]
 }
 
@@ -146,6 +152,12 @@ actor FileLocalStore: LocalStore {
         persist()
     }
 
+    func saveNoteConnection(_ connection: NoteConnection) {
+        upsert(connection, into: &snapshot.noteConnections)
+        snapshot.noteConnections.sort { $0.createdAt > $1.createdAt }
+        persist()
+    }
+
     func deleteWikiTopics() {
         snapshot.wikiTopics = []
         persist()
@@ -170,6 +182,7 @@ actor FileLocalStore: LocalStore {
         restored.contradictions.sort { $0.createdAt > $1.createdAt }
         restored.insights.sort { $0.createdAt > $1.createdAt }
         restored.wikiTopics.sort { $0.sourceNoteIDs.count > $1.sourceNoteIDs.count }
+        restored.noteConnections.sort { $0.createdAt > $1.createdAt }
         snapshot = restored
         persist()
     }
@@ -192,6 +205,10 @@ actor FileLocalStore: LocalStore {
 
     func loadWikiTopics() -> [WikiTopic] {
         snapshot.wikiTopics
+    }
+
+    func loadNoteConnections() -> [NoteConnection] {
+        snapshot.noteConnections
     }
 
     func loadChatMessages() -> [ChatMessage] {
@@ -232,6 +249,7 @@ actor InMemoryLocalStore: LocalStore {
     private var contradictions: [Contradiction] = []
     private var insights: [Insight] = []
     private var wikiTopics: [WikiTopic] = []
+    private var noteConnections: [NoteConnection] = []
     private var chatMessages: [ChatMessage] = []
 
     func saveCapture(_ capture: Capture) {
@@ -277,6 +295,10 @@ actor InMemoryLocalStore: LocalStore {
         }
     }
 
+    func saveNoteConnection(_ connection: NoteConnection) {
+        upsert(connection, into: &noteConnections)
+    }
+
     func deleteWikiTopics() {
         wikiTopics = []
     }
@@ -296,6 +318,7 @@ actor InMemoryLocalStore: LocalStore {
                 contradictions: contradictions,
                 insights: insights,
                 wikiTopics: wikiTopics,
+                noteConnections: noteConnections,
                 chatMessages: chatMessages
             )
         )
@@ -310,6 +333,7 @@ actor InMemoryLocalStore: LocalStore {
         contradictions = restored.contradictions.sorted { $0.createdAt > $1.createdAt }
         insights = restored.insights.sorted { $0.createdAt > $1.createdAt }
         wikiTopics = restored.wikiTopics.sorted { $0.sourceNoteIDs.count > $1.sourceNoteIDs.count }
+        noteConnections = restored.noteConnections.sorted { $0.createdAt > $1.createdAt }
         chatMessages = restored.chatMessages
     }
 
@@ -331,6 +355,10 @@ actor InMemoryLocalStore: LocalStore {
 
     func loadWikiTopics() -> [WikiTopic] {
         wikiTopics
+    }
+
+    func loadNoteConnections() -> [NoteConnection] {
+        noteConnections
     }
 
     func loadChatMessages() -> [ChatMessage] {

@@ -8,3 +8,6 @@ build/
 *.ipa
 *.dSYM.zip
 *.dSYM
+__pycache__/
+*.pyc
+717f638f-864a-4b08-ba3d-d9c5739e1f3f_WorkBench_Product_Doc_.pdf

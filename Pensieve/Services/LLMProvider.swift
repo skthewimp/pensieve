@@ -25,6 +25,8 @@ protocol LLMProvider {
     func chat(_ request: ChatRequest) async throws -> ChatResponse
     func findContradictions(in notes: [MemoryNote]) async throws -> [Contradiction]
     func analyzeCorpus(_ notes: [MemoryNote]) async throws -> [Insight]
+    func generateWeeklyDigest(from notes: [MemoryNote]) async throws -> Insight
+    func generateNoteConnections(from notes: [MemoryNote]) async throws -> [NoteConnection]
     func cleanUpTopics(_ notes: [MemoryNote]) async throws -> TopicCleanupResult
     func generateWikiTopicPage(topic: WikiTopic, notes: [MemoryNote]) async throws -> WikiTopic
 }
@@ -56,6 +58,19 @@ struct AnthropicInsightsResponse: Codable {
 
 struct AnthropicInsight: Codable {
     let kind: InsightKind
+    let title: String
+    let explanation: String
+    let sourceNoteIDs: [UUID]
+    let themes: [String]
+    let confidence: Double?
+}
+
+struct AnthropicNoteConnectionsResponse: Codable {
+    let connections: [AnthropicNoteConnection]
+}
+
+struct AnthropicNoteConnection: Codable {
+    let kind: NoteConnectionKind
     let title: String
     let explanation: String
     let sourceNoteIDs: [UUID]
@@ -271,7 +286,7 @@ struct AnthropicProvider: LLMProvider {
 
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": 4096,
+            "max_tokens": 8192,
             "system": """
             You analyze a personal note corpus for meaningful contradictions, changed beliefs, recurring tensions, and shifts in priorities. Only return contradictions that are supported by the provided notes. Prefer concrete source-backed changes over vague psychological interpretation.
 
@@ -371,7 +386,7 @@ struct AnthropicProvider: LLMProvider {
 
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": 4096,
+            "max_tokens": 8192,
             "system": """
             You analyze a personal note corpus for a local-first memory app called Pensieve. Generate durable, source-backed insights that deserve review. Prefer high-signal findings over volume.
 
@@ -473,21 +488,263 @@ struct AnthropicProvider: LLMProvider {
         }
     }
 
+    func generateWeeklyDigest(from notes: [MemoryNote]) async throws -> Insight {
+        guard let apiKey = keychain.loadAnthropicAPIKey() else {
+            throw AnthropicError.apiKeyMissing
+        }
+
+        let calendar = Calendar.current
+        let endDate = Date()
+        let startDate = calendar.date(byAdding: .day, value: -7, to: endDate) ?? endDate
+        let weeklyNotes = notes
+            .filter { $0.createdAt >= startDate && $0.createdAt <= endDate }
+            .sorted { $0.createdAt < $1.createdAt }
+
+        guard !weeklyNotes.isEmpty else {
+            throw AnthropicError.invalidJSON("No notes from the last 7 days to digest.")
+        }
+
+        let noteDigest = weeklyNotes
+            .map(Self.buildAnalysisDigest)
+            .joined(separator: "\n\n---\n\n")
+
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 3072,
+            "temperature": 0,
+            "system": """
+            You create a weekly review digest for a local-first personal memory app called Pensieve. The digest must be concrete, source-backed, and useful for rediscovery and review.
+
+            Return only a JSON object with this exact shape:
+            {
+              "insights": [
+                {
+                  "kind": "weeklyDigest",
+                  "title": "Week of short date range",
+                  "explanation": "A concise markdown-style digest with sections: Recurring themes, Open loops, Decisions or possible decisions, Rediscovered threads, Questions for next week.",
+                  "sourceNoteIDs": ["uuid from supplied notes"],
+                  "themes": ["theme"],
+                  "confidence": 0.0
+                }
+              ]
+            }
+
+            Rules:
+            - Return exactly one insight.
+            - The kind must be weeklyDigest.
+            - sourceNoteIDs must only contain IDs from the supplied notes.
+            - Include source-grounded specifics, not generic advice.
+            - If the week is thin, say that directly in the explanation.
+            - Do not diagnose the user or invent facts absent from notes.
+            - confidence must be between 0 and 1.
+            - Return only JSON, with no markdown fences or extra prose.
+            """,
+            "messages": [
+                [
+                    "role": "user",
+                    "content": """
+                    Generate a weekly digest for notes created from \(Self.shortDate(startDate)) through \(Self.shortDate(endDate)).
+
+                    Notes:
+                    \(noteDigest)
+                    """
+                ]
+            ]
+        ]
+
+        var urlRequest = URLRequest(url: baseURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.addValue(apiKey, forHTTPHeaderField: "x-api-key")
+        urlRequest.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "content-type")
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let responseBody = String(data: data, encoding: .utf8) ?? "no body"
+            throw AnthropicError.apiError(statusCode: statusCode, message: responseBody)
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let contentBlocks = json["content"] as? [[String: Any]] else {
+            throw AnthropicError.invalidJSON()
+        }
+
+        let textOut = contentBlocks.compactMap { block -> String? in
+            guard (block["type"] as? String) == "text" else { return nil }
+            return block["text"] as? String
+        }.joined(separator: "\n\n")
+
+        let jsonString = Self.extractJSON(from: textOut)
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw AnthropicError.invalidJSON()
+        }
+
+        do {
+            let validNoteIDs = Set(weeklyNotes.map(\.id))
+            let response = try JSONDecoder().decode(AnthropicInsightsResponse.self, from: jsonData)
+            guard let raw = response.insights.first else {
+                throw AnthropicError.invalidJSON("Anthropic returned no weekly digest.")
+            }
+
+            let sourceNoteIDs = raw.sourceNoteIDs.filter { validNoteIDs.contains($0) }
+            guard !sourceNoteIDs.isEmpty else {
+                throw AnthropicError.invalidJSON("Weekly digest did not cite any valid source notes.")
+            }
+
+            return Insight(
+                kind: .weeklyDigest,
+                title: raw.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Weekly Digest" : raw.title,
+                explanation: raw.explanation,
+                sourceNoteIDs: sourceNoteIDs,
+                themes: raw.themes.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty },
+                confidence: raw.confidence,
+                status: .pending,
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+        } catch let error as AnthropicError {
+            throw error
+        } catch {
+            throw AnthropicError.invalidJSON()
+        }
+    }
+
+    func generateNoteConnections(from notes: [MemoryNote]) async throws -> [NoteConnection] {
+        guard let apiKey = keychain.loadAnthropicAPIKey() else {
+            throw AnthropicError.apiKeyMissing
+        }
+
+        let connectionNotes = Self.connectionSample(from: notes, limit: 80)
+        guard connectionNotes.count >= 2 else {
+            throw AnthropicError.invalidJSON("At least two notes are needed to generate retrospective connections.")
+        }
+
+        let noteDigest = connectionNotes
+            .map(Self.buildConnectionDigest)
+            .joined(separator: "\n\n---\n\n")
+
+        let body: [String: Any] = [
+            "model": model,
+            "max_tokens": 8192,
+            "temperature": 0,
+            "system": """
+            You connect notes retrospectively for a local-first personal memory app called Pensieve. Your job is to find meaningful backlinks and coherent thought threads that a simple keyword search would miss.
+
+            Return only a JSON object with this exact shape:
+            {
+              "connections": [
+                {
+                  "kind": "backlink",
+                  "title": "short title",
+                  "explanation": "two or three concrete sentences explaining the connection and why it matters",
+                  "sourceNoteIDs": ["uuid from supplied notes"],
+                  "themes": ["theme"],
+                  "confidence": 0.0
+                }
+              ]
+            }
+
+            Allowed kind values:
+            - backlink: a recent note is meaningfully illuminated by one or more older notes.
+            - thread: three or more notes together form a coherent thought, recurring concern, decision arc, or evolving idea.
+
+            Rules:
+            - sourceNoteIDs must only contain IDs from the supplied notes.
+            - Each connection must include at least 2 sourceNoteIDs.
+            - Prefer 6 to 12 high-signal connections over volume.
+            - Prefer non-obvious connections grounded in content, not just shared tags.
+            - At least half the connections should include notes from different weeks or months when evidence supports it.
+            - Keep explanations to one or two sentences.
+            - Explain the user-facing value of reviewing the notes together.
+            - Do not diagnose the user or invent facts absent from notes.
+            - confidence must be between 0 and 1.
+            - Return only JSON, with no markdown fences or extra prose.
+            """,
+            "messages": [
+                [
+                    "role": "user",
+                    "content": """
+                    Generate retrospective note connections from this corpus sample:
+
+                    \(noteDigest)
+                    """
+                ]
+            ]
+        ]
+
+        var urlRequest = URLRequest(url: baseURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.addValue(apiKey, forHTTPHeaderField: "x-api-key")
+        urlRequest.addValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "content-type")
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let responseBody = String(data: data, encoding: .utf8) ?? "no body"
+            throw AnthropicError.apiError(statusCode: statusCode, message: responseBody)
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let contentBlocks = json["content"] as? [[String: Any]] else {
+            throw AnthropicError.invalidJSON()
+        }
+
+        let textOut = contentBlocks.compactMap { block -> String? in
+            guard (block["type"] as? String) == "text" else { return nil }
+            return block["text"] as? String
+        }.joined(separator: "\n\n")
+
+        let jsonString = Self.extractJSON(from: textOut)
+        guard let jsonData = jsonString.data(using: .utf8) else {
+            throw AnthropicError.invalidJSON()
+        }
+
+        do {
+            let validNoteIDs = Set(connectionNotes.map(\.id))
+            let response = try JSONDecoder().decode(AnthropicNoteConnectionsResponse.self, from: jsonData)
+            return response.connections
+                .filter { !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .filter { !$0.explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .map { raw in
+                    NoteConnection(
+                        kind: raw.kind,
+                        title: raw.title,
+                        explanation: raw.explanation,
+                        sourceNoteIDs: raw.sourceNoteIDs.filter { validNoteIDs.contains($0) },
+                        themes: raw.themes.map(Self.normalizedTheme).filter { !$0.isEmpty },
+                        confidence: min(1, max(0, raw.confidence ?? 0.7)),
+                        createdAt: Date(),
+                        updatedAt: Date()
+                    )
+                }
+                .filter { $0.sourceNoteIDs.count >= 2 }
+        } catch {
+            throw AnthropicError.invalidJSON()
+        }
+    }
+
     func cleanUpTopics(_ notes: [MemoryNote]) async throws -> TopicCleanupResult {
         guard let apiKey = keychain.loadAnthropicAPIKey() else {
             throw AnthropicError.apiKeyMissing
         }
 
-        let noteDigests = Self.topicCleanupSample(from: notes, limit: 24)
+        let noteDigests = Self.topicCleanupSample(from: notes, limit: 48)
             .map(Self.buildTopicCleanupDigest)
             .joined(separator: "\n\n---\n\n")
         let themeDigest = Self.buildThemeDigest(from: notes)
 
         let body: [String: Any] = [
             "model": model,
-            "max_tokens": 2400,
+            "max_tokens": 4096,
+            "temperature": 0,
             "system": """
-            You clean up topics for a local-first personal memory app called Pensieve. The current notes have too many overlapping themes. Consolidate them into a smaller canonical topic set. This is a taxonomy-only pass. Keep the response compact.
+            You clean up topics for a local-first personal memory app called Pensieve. The current notes have too many overlapping themes. Consolidate raw themes into a small durable topic map for navigation, rediscovery, wiki pages, and weekly digests. This is a taxonomy-only pass.
 
             Return only a JSON object with this exact shape:
             {
@@ -504,10 +761,12 @@ struct AnthropicProvider: LLMProvider {
             }
 
             Rules:
-            - Use 8 to 16 canonical themes unless the corpus is very small.
+            - Use 10 to 14 canonical themes for a corpus of this size. Never create one topic per raw theme.
             - canonicalTheme values must be lowercase, short, stable nouns or noun phrases.
-            - Merge near-duplicates such as work/career/consulting when they are serving the same role.
-            - Split only when notes clearly represent different recurring concerns.
+            - Merge near-duplicates and sibling tags aggressively. Examples: work/career/consulting/business/sales/entrepreneurship -> career; identity/self-awareness/clarity/confidence/growth -> self-understanding; priorities/productivity/focus/habits/planning/decisions -> productivity; ai/technology/tools/automation/software -> technology.
+            - Split only when a topic would otherwise mix genuinely different user-facing review contexts.
+            - Put raw theme names into aliases so the app can map old notes onto the new canonical topics.
+            - Cover the high-count raw themes in either canonicalTheme or aliases.
             - Do not assign themes note-by-note. Return an empty noteThemeAssignments array.
             - sourceNoteIDs must use only IDs from the supplied note sample.
             - sourceNoteIDs should contain 1 to 4 representative IDs from the supplied note sample.
@@ -875,6 +1134,26 @@ struct AnthropicProvider: LLMProvider {
         """
     }
 
+    private static func buildConnectionDigest(for note: MemoryNote) -> String {
+        let summary = note.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let excerpt = note.body
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .prefix(650)
+        let themes = note.themes.isEmpty ? "none" : note.themes.joined(separator: ", ")
+
+        return """
+        ID: \(note.id.uuidString)
+        Date: \(ISO8601DateFormatter().string(from: note.createdAt))
+        Title: \(note.title)
+        Themes: \(themes)
+        Tone: \(note.emotionalTone ?? "unknown")
+        Summary:
+        \(summary)
+        Excerpt:
+        \(excerpt)
+        """
+    }
+
     private static func buildThemeDigest(from notes: [MemoryNote]) -> String {
         let counts = Dictionary(
             grouping: notes.flatMap(\.themes).map(normalizedTheme).filter { !$0.isEmpty },
@@ -928,10 +1207,59 @@ struct AnthropicProvider: LLMProvider {
         return selected
     }
 
+    private static func connectionSample(from notes: [MemoryNote], limit: Int) -> [MemoryNote] {
+        let sortedNotes = notes.sorted { $0.createdAt > $1.createdAt }
+        let recentLimit = max(12, limit / 3)
+        let recent = Array(sortedNotes.prefix(recentLimit))
+        let recentIDs = Set(recent.map(\.id))
+
+        let topThemes = Set(
+            Dictionary(grouping: notes.flatMap(\.themes).map(normalizedTheme).filter { !$0.isEmpty }, by: { $0 })
+                .map { (theme: $0.key, count: $0.value.count) }
+                .sorted {
+                    if $0.count == $1.count {
+                        return $0.theme < $1.theme
+                    }
+                    return $0.count > $1.count
+                }
+                .prefix(20)
+                .map(\.theme)
+        )
+
+        var selected = recent
+        var selectedIDs = recentIDs
+
+        for theme in topThemes {
+            let themedNotes = sortedNotes
+                .filter { !selectedIDs.contains($0.id) && $0.themes.map(normalizedTheme).contains(theme) }
+                .suffix(3)
+            for note in themedNotes {
+                selected.append(note)
+                selectedIDs.insert(note.id)
+                if selected.count >= limit { return selected.sorted { $0.createdAt < $1.createdAt } }
+            }
+        }
+
+        for note in sortedNotes.reversed() where !selectedIDs.contains(note.id) {
+            selected.append(note)
+            selectedIDs.insert(note.id)
+            if selected.count >= limit { break }
+        }
+
+        return selected.sorted { $0.createdAt < $1.createdAt }
+    }
+
     private static func normalizedTheme(_ theme: String) -> String {
         theme
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+    }
+
+    private static func shortDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
     }
 
     private func buildNoteBody(input: CaptureProcessingInput, processed: AnthropicProcessedNote) -> String {

@@ -50,7 +50,43 @@ struct NotesView: View {
 }
 
 struct NoteDetailView: View {
+    @EnvironmentObject private var appModel: AppModel
     let note: MemoryNote
+
+    private var relatedNotes: [MemoryNote] {
+        let noteThemes = Set(note.themes.map(normalizedTheme).filter { !$0.isEmpty })
+        let noteTerms = significantTerms(in: searchableText(for: note))
+
+        let scored = appModel.notes
+            .filter { $0.id != note.id }
+            .map { candidate in
+                let candidateThemes = Set(candidate.themes.map(normalizedTheme).filter { !$0.isEmpty })
+                let sharedThemes = noteThemes.intersection(candidateThemes).count
+                let sharedTerms = noteTerms.intersection(significantTerms(in: searchableText(for: candidate))).count
+                let score = (sharedThemes * 4) + min(sharedTerms, 6)
+                return (note: candidate, score: score)
+            }
+            .filter { $0.score > 0 }
+            .sorted {
+                if $0.score == $1.score {
+                    return $0.note.createdAt > $1.note.createdAt
+                }
+                return $0.score > $1.score
+            }
+
+        return Array(scored.prefix(8).map(\.note))
+    }
+
+    private var backlinks: [NoteConnection] {
+        appModel.noteConnections
+            .filter { $0.sourceNoteIDs.contains(note.id) }
+            .sorted {
+                if $0.confidence == $1.confidence {
+                    return $0.createdAt > $1.createdAt
+                }
+                return $0.confidence > $1.confidence
+            }
+    }
 
     var body: some View {
         ScrollView {
@@ -66,12 +102,102 @@ struct NoteDetailView: View {
                         .font(.headline)
                     FlowLayout(items: note.themes)
                 }
+
+                if !backlinks.isEmpty {
+                    Divider()
+                    Text("Backlinks")
+                        .font(.headline)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(backlinks.prefix(6)) { connection in
+                            NavigationLink {
+                                NoteConnectionDetailView(connection: connection)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(connection.title)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(connection.explanation)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                if !relatedNotes.isEmpty {
+                    Divider()
+                    Text("Related Notes")
+                        .font(.headline)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(relatedNotes) { relatedNote in
+                            NavigationLink {
+                                NoteDetailView(note: relatedNote)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(relatedNote.title)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(relatedNote.summary)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
         }
         .navigationTitle(note.title)
     }
+
+    private func searchableText(for note: MemoryNote) -> String {
+        ([note.title, note.summary, note.body] + note.themes)
+            .joined(separator: " ")
+            .lowercased()
+    }
+
+    private func significantTerms(in text: String) -> Set<String> {
+        Set(
+            text
+                .split { !$0.isLetter && !$0.isNumber }
+                .map(String.init)
+                .filter { $0.count > 4 && !Self.stopWords.contains($0) }
+        )
+    }
+
+    private func normalizedTheme(_ theme: String) -> String {
+        theme.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static let stopWords: Set<String> = [
+        "about",
+        "after",
+        "again",
+        "could",
+        "every",
+        "notes",
+        "other",
+        "really",
+        "should",
+        "their",
+        "there",
+        "these",
+        "thing",
+        "things",
+        "think",
+        "thought",
+        "through",
+        "would"
+    ]
 }
 
 private struct FlowLayout: View {

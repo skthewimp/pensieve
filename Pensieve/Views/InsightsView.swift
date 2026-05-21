@@ -4,7 +4,7 @@ struct InsightsView: View {
     @EnvironmentObject private var appModel: AppModel
 
     private var analyzer: CorpusAnalyzer {
-        CorpusAnalyzer(notes: appModel.notes, contradictions: appModel.contradictions)
+        CorpusAnalyzer(notes: appModel.notes, contradictions: appModel.contradictions, insights: appModel.insights)
     }
 
     var body: some View {
@@ -21,9 +21,46 @@ struct InsightsView: View {
                     LabeledContent("Unresolved Tensions", value: "\(analyzer.unresolvedContradictions.count)")
                 }
 
-                if !appModel.insights.isEmpty {
+                if !analyzer.weeklyDigests.isEmpty {
+                    Section("Weekly Digests") {
+                        ForEach(analyzer.weeklyDigests.prefix(4)) { insight in
+                            NavigationLink {
+                                GeneratedInsightDetailView(insight: insight)
+                            } label: {
+                                GeneratedInsightRow(insight: insight)
+                            }
+                        }
+                    }
+                }
+
+                if !analyzer.resurfacedNotes.isEmpty {
+                    Section("Rediscovered Notes") {
+                        ForEach(analyzer.resurfacedNotes.prefix(8)) { item in
+                            NavigationLink {
+                                InsightNoteDetailView(note: item.note)
+                            } label: {
+                                RediscoveredNoteRow(item: item)
+                            }
+                        }
+                    }
+                }
+
+                if !appModel.noteConnections.isEmpty {
+                    Section("Retrospective Connections") {
+                        ForEach(appModel.noteConnections.prefix(12)) { connection in
+                            NavigationLink {
+                                NoteConnectionDetailView(connection: connection)
+                            } label: {
+                                NoteConnectionRow(connection: connection)
+                            }
+                        }
+                    }
+                }
+
+                let generatedInsights = appModel.insights.filter { $0.kind != .weeklyDigest }
+                if !generatedInsights.isEmpty {
                     Section("Generated Insights") {
-                        ForEach(appModel.insights) { insight in
+                        ForEach(generatedInsights) { insight in
                             NavigationLink {
                                 GeneratedInsightDetailView(insight: insight)
                             } label: {
@@ -127,6 +164,73 @@ struct InsightsView: View {
     }
 }
 
+struct NoteConnectionDetailView: View {
+    @EnvironmentObject private var appModel: AppModel
+    let connection: NoteConnection
+
+    private var sourceNotes: [MemoryNote] {
+        let notesByID = Dictionary(uniqueKeysWithValues: appModel.notes.map { ($0.id, $0) })
+        return connection.sourceNoteIDs.compactMap { notesByID[$0] }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                LabeledContent("Type", value: connection.kind.label)
+                LabeledContent("Confidence", value: connection.confidence.formatted(.percent.precision(.fractionLength(0))))
+            }
+
+            Section("Connection") {
+                Text(connection.explanation)
+                    .textSelection(.enabled)
+
+                if !connection.themes.isEmpty {
+                    InsightThemeChips(items: connection.themes)
+                }
+            }
+
+            if !sourceNotes.isEmpty {
+                Section("Connected Notes") {
+                    ForEach(sourceNotes) { note in
+                        NavigationLink {
+                            NoteDetailView(note: note)
+                        } label: {
+                            InsightNoteRow(note: note, systemImage: note.id == sourceNotes.first?.id ? "clock" : "arrow.uturn.backward")
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(connection.title)
+    }
+}
+
+private struct NoteConnectionRow: View {
+    let connection: NoteConnection
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(connection.kind.label, systemImage: connection.kind == .backlink ? "link" : "point.3.connected.trianglepath.dotted")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(connection.confidence.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(connection.title)
+                .font(.headline)
+
+            Text(connection.explanation)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+        }
+    }
+}
+
 private struct InsightMetric: View {
     let title: String
     let value: String
@@ -186,6 +290,8 @@ private struct GeneratedInsightRow: View {
             return "checkmark.circle"
         case .beliefShift:
             return "arrow.triangle.2.circlepath"
+        case .weeklyDigest:
+            return "calendar.badge.clock"
         }
     }
 
@@ -344,38 +450,101 @@ private struct InsightNoteRow: View {
 }
 
 private struct InsightNoteDetailView: View {
+    @EnvironmentObject private var appModel: AppModel
     let note: MemoryNote
 
+    private var relatedNotes: [MemoryNote] {
+        CorpusAnalyzer(notes: appModel.notes, contradictions: appModel.contradictions)
+            .relatedNotes(to: note, limit: 8)
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        List {
+            Section("Summary") {
                 Text(note.summary)
-                    .font(.headline)
 
                 if !note.themes.isEmpty {
-                    Text(note.themes.joined(separator: " · "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    InsightThemeChips(items: note.themes)
                 }
+            }
 
-                Divider()
-
+            Section("Body") {
                 Text(note.body)
                     .textSelection(.enabled)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
+
+            if !relatedNotes.isEmpty {
+                Section("Related Notes") {
+                    ForEach(relatedNotes) { relatedNote in
+                        NavigationLink {
+                            InsightNoteDetailView(note: relatedNote)
+                        } label: {
+                            InsightNoteRow(note: relatedNote, systemImage: "point.3.connected.trianglepath.dotted")
+                        }
+                    }
+                }
+            }
         }
         .navigationTitle(note.title)
+    }
+}
+
+private struct RediscoveredNoteRow: View {
+    let item: ResurfacedNote
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "archivebox")
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.note.title)
+                        .font(.headline)
+                    Spacer()
+                    Text(item.note.createdAt, style: .date)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(item.reason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                Text(item.note.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
     }
 }
 
 private struct CorpusAnalyzer {
     let notes: [MemoryNote]
     let contradictions: [Contradiction]
+    let insights: [Insight]
+
+    init(notes: [MemoryNote], contradictions: [Contradiction], insights: [Insight] = []) {
+        self.notes = notes
+        self.contradictions = contradictions
+        self.insights = insights
+    }
 
     private var recentCutoff: Date {
-        Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+        Calendar.current.date(byAdding: .day, value: -14, to: Date()) ?? Date()
+    }
+
+    private var rediscoveryCutoff: Date {
+        Calendar.current.date(byAdding: .day, value: -14, to: Date()) ?? Date()
+    }
+
+    var weeklyDigests: [Insight] {
+        insights
+            .filter { $0.kind == .weeklyDigest }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
     var themeSummaries: [ThemeSummary] {
@@ -444,6 +613,69 @@ private struct CorpusAnalyzer {
         unresolvedContradictions.count
     }
 
+    var resurfacedNotes: [ResurfacedNote] {
+        let recentThemes = Set(
+            notes
+                .filter { $0.createdAt >= recentCutoff }
+                .flatMap(\.themes)
+                .map(\.normalizedTheme)
+                .filter { !$0.isEmpty }
+        )
+
+        guard !recentThemes.isEmpty else { return [] }
+
+        return notes
+            .filter { $0.createdAt < rediscoveryCutoff }
+            .compactMap { note -> ResurfacedNote? in
+                let matches = note.themes
+                    .map(\.normalizedTheme)
+                    .filter { recentThemes.contains($0) }
+                guard !matches.isEmpty else { return nil }
+
+                let reason = "Older note connected to recent \(matches.prefix(2).map(\.capitalized).joined(separator: ", ")) thinking."
+                return ResurfacedNote(note: note, reason: reason, score: matches.count)
+            }
+            .sorted {
+                if $0.score == $1.score {
+                    return $0.note.createdAt > $1.note.createdAt
+                }
+                return $0.score > $1.score
+            }
+    }
+
+    func relatedNotes(to note: MemoryNote, limit: Int) -> [MemoryNote] {
+        let noteThemes = Set(note.themes.map(\.normalizedTheme).filter { !$0.isEmpty })
+        let noteTerms = significantTerms(in: note.searchableText)
+
+        let scored = notes
+            .filter { $0.id != note.id }
+            .map { candidate in
+                let candidateThemes = Set(candidate.themes.map(\.normalizedTheme).filter { !$0.isEmpty })
+                let sharedThemes = noteThemes.intersection(candidateThemes).count
+                let sharedTerms = noteTerms.intersection(significantTerms(in: candidate.searchableText)).count
+                let score = (sharedThemes * 4) + min(sharedTerms, 6)
+                return (note: candidate, score: score)
+            }
+            .filter { $0.score > 0 }
+            .sorted {
+                if $0.score == $1.score {
+                    return $0.note.createdAt > $1.note.createdAt
+                }
+                return $0.score > $1.score
+            }
+
+        return Array(scored.prefix(limit).map(\.note))
+    }
+
+    private func significantTerms(in text: String) -> Set<String> {
+        Set(
+            text
+                .split { !$0.isLetter && !$0.isNumber }
+                .map(String.init)
+                .filter { $0.count > 4 && !Self.stopWords.contains($0) }
+        )
+    }
+
     private static let openLoopSignals = [
         "?",
         "need to",
@@ -471,6 +703,27 @@ private struct CorpusAnalyzer {
         "tradeoff",
         "next step"
     ]
+
+    private static let stopWords: Set<String> = [
+        "about",
+        "after",
+        "again",
+        "could",
+        "every",
+        "notes",
+        "other",
+        "really",
+        "should",
+        "their",
+        "there",
+        "these",
+        "thing",
+        "things",
+        "think",
+        "thought",
+        "through",
+        "would"
+    ]
 }
 
 private struct ThemeSummary: Identifiable {
@@ -487,6 +740,14 @@ private struct ThemeSummary: Identifiable {
     var recentTitles: String {
         notes.prefix(3).map(\.title).joined(separator: " · ")
     }
+}
+
+private struct ResurfacedNote: Identifiable {
+    let note: MemoryNote
+    let reason: String
+    let score: Int
+
+    var id: UUID { note.id }
 }
 
 private extension MemoryNote {

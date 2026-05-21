@@ -7,6 +7,7 @@ enum InsightKind: String, Codable, CaseIterable, Identifiable {
     case question
     case decision
     case beliefShift
+    case weeklyDigest
 
     var id: String { rawValue }
 
@@ -24,6 +25,8 @@ enum InsightKind: String, Codable, CaseIterable, Identifiable {
             return "Decision"
         case .beliefShift:
             return "Belief Shift"
+        case .weeklyDigest:
+            return "Weekly Digest"
         }
     }
 }

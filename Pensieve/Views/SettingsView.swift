@@ -89,6 +89,20 @@ struct SettingsView: View {
 
                 Section("Analysis") {
                     Button {
+                        generateWeeklyDigest()
+                    } label: {
+                        Label("Generate Weekly Digest", systemImage: "calendar.badge.clock")
+                    }
+                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isAnthropicConfigured)
+
+                    Button {
+                        connectNotesRetrospectively()
+                    } label: {
+                        Label("Connect Notes Retrospectively", systemImage: "link")
+                    }
+                    .disabled(isAnalyzing || appModel.notes.count < 2 || !appModel.isAnthropicConfigured)
+
+                    Button {
                         analyzeCorpus()
                     } label: {
                         Label("Analyze Corpus", systemImage: "sparkles")
@@ -234,6 +248,52 @@ struct SettingsView: View {
                 let savedCount = try await appModel.analyzeCorpus()
                 await MainActor.run {
                     analysisMessage = savedCount == 0 ? "No new insights found." : "Added \(savedCount) insights."
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            } catch {
+                await MainActor.run {
+                    analysisMessage = error.localizedDescription
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            }
+        }
+    }
+
+    private func generateWeeklyDigest() {
+        isAnalyzing = true
+        analysisMessage = nil
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        Task {
+            do {
+                _ = try await appModel.generateWeeklyDigest()
+                await MainActor.run {
+                    analysisMessage = "Weekly digest added to Insights."
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            } catch {
+                await MainActor.run {
+                    analysisMessage = error.localizedDescription
+                    isAnalyzing = false
+                    UIApplication.shared.isIdleTimerDisabled = false
+                }
+            }
+        }
+    }
+
+    private func connectNotesRetrospectively() {
+        isAnalyzing = true
+        analysisMessage = nil
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        Task {
+            do {
+                let savedCount = try await appModel.connectNotesRetrospectively()
+                await MainActor.run {
+                    analysisMessage = savedCount == 0 ? "No new retrospective connections found." : "Added \(savedCount) retrospective connections."
                     isAnalyzing = false
                     UIApplication.shared.isIdleTimerDisabled = false
                 }
