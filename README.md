@@ -840,3 +840,7 @@ These can come later if real usage justifies them.
 - Build provider-neutral LLM interfaces, Anthropic first, OpenAI later.
 - Use local retrieval for chat rather than sending the whole database.
 - Use Obsidian/markdown only as an optional export path later.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
