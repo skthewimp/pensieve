@@ -8,8 +8,20 @@ final class TranscriptionService: ObservableObject {
 
     private static let modelName = "openai_whisper-small"
     private var whisperKit: WhisperKit?
+    private var isLoadingModel = false
 
     func loadModel() async {
+        guard whisperKit == nil else { return }
+        if isLoadingModel {
+            while isLoadingModel, whisperKit == nil {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            return
+        }
+
+        isLoadingModel = true
+        defer { isLoadingModel = false }
+
         if let existingFolder = modelFolder() {
             loadingProgress = "Loading model..."
             do {
@@ -51,6 +63,8 @@ final class TranscriptionService: ObservableObject {
     }
 
     func transcribe(audioURL: URL) async throws -> String {
+        await loadModel()
+
         guard let whisperKit else {
             throw TranscriptionError.modelNotLoaded
         }

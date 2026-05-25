@@ -24,6 +24,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Getting Started") {
+                    GettingStartedStep(number: 1, text: "Save your Anthropic API key.")
+                    GettingStartedStep(number: 2, text: "Capture voice, text, or URLs from the Capture tab.")
+                    GettingStartedStep(number: 3, text: "Use Notes and Wiki to browse saved memory.")
+                    GettingStartedStep(number: 4, text: "Use Chat to ask questions over your notes.")
+                    GettingStartedStep(number: 5, text: "Run analysis tools here when you want digests, links, insights, topic cleanup, or contradictions.")
+                }
+
                 Section("Anthropic") {
                     SecureField("API key", text: $apiKey)
                         .textInputAutocapitalization(.never)
@@ -445,6 +453,24 @@ struct SettingsView: View {
             }
         case .failure(let error):
             importMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct GettingStartedStep: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text("\(number)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.accentColor))
+
+            Text(text)
+                .foregroundStyle(.secondary)
         }
     }
 }

@@ -44,9 +44,12 @@ final class AppModel: ObservableObject {
             .store(in: &cancellables)
 
         Task {
+            await transcriptionService.loadModel()
+        }
+
+        Task {
             await refresh()
             await runPeriodicBacklinkMaintenanceIfNeeded()
-            await transcriptionService.loadModel()
         }
     }
 

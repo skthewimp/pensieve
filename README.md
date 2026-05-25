@@ -8,7 +8,44 @@ calls for note processing, chat, and contradiction analysis.
 ## Current App Status
 
 Built and tested on a physical iPhone with bundle id
-`com.karthikshashidhar.pensieve`.
+`com.karthikshashidhar.pensieve`. Current TestFlight/device build is version
+`0.1`, build `3`.
+
+## Quick Start For New Users
+
+1. Install Pensieve from TestFlight or a local device build.
+2. Open **Capture**.
+3. Paste your Anthropic API key into the **Start Here** section and tap
+   **Save API Key**. Pensieve stores the key in the iOS Keychain.
+4. Create a first note:
+   - Tap **Record Voice Note**, speak, then tap **Stop Recording**.
+   - Or paste text and tap **Save Text**.
+   - Or paste a URL, add an optional note, and tap **Save URL**.
+5. Browse saved notes in **Notes** and **Wiki**.
+6. Use **Chat** to ask questions over saved notes.
+7. Use **Settings** for maintenance actions:
+   - **Generate Weekly Digest** creates a summary insight.
+   - **Connect Notes Retrospectively** adds links between related notes.
+   - **Analyze Corpus** creates reviewable insights.
+   - **Preview Topic Cleanup** proposes cleaner topics; **Apply Topic
+     Cleanup** commits the preview.
+   - **Find Contradictions** looks for tensions across notes.
+   - **Export Pensieve Backup** and **Restore Pensieve Backup** move the local
+     store in and out as JSON.
+
+### What Requires Anthropic
+
+Pensieve needs an Anthropic API key for note processing, URL processing, chat,
+digests, corpus analysis, topic cleanup, note linking, and contradiction
+analysis. Voice audio is recorded locally and transcribed on device with
+WhisperKit, but the resulting transcript is still sent to Anthropic when
+Pensieve turns it into a structured note.
+
+### What Is Local
+
+The app stores its local JSON database in Application Support and keeps the
+Anthropic key in Keychain. Audio transcription runs on device. Backup export
+and restore use the iOS Files picker.
 
 Implemented:
 
@@ -47,7 +84,6 @@ Not yet implemented:
 - Automatic contradiction scans after every capture/import.
 - Durable background processing.
 - True graph layout for the mindmap.
-- TestFlight/App Store upload.
 - OpenAI provider.
 
 ## How The App Works Today
@@ -222,7 +258,7 @@ Current release identifiers:
 - Bundle id: `com.karthikshashidhar.pensieve`
 - Apple team id: `DQ23J9RMB2`
 - Version: `0.1`
-- Build: `1`
+- Build: `3`
 
 The App Store icon asset is present at:
 

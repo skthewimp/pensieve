@@ -5,12 +5,42 @@ struct CaptureView: View {
     @State private var text = ""
     @State private var urlText = ""
     @State private var urlNote = ""
+    @State private var setupAPIKey = ""
+    @State private var setupMessage: String?
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             Form {
+                if !appModel.isAnthropicConfigured {
+                    Section("Start Here") {
+                        Text("Pensieve needs your Anthropic API key before it can turn voice, text, or URLs into structured notes. The key is stored in the iOS Keychain.")
+                            .foregroundStyle(.secondary)
+
+                        SecureField("Anthropic API key", text: $setupAPIKey)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+
+                        Button {
+                            saveSetupAPIKey()
+                        } label: {
+                            Label("Save API Key", systemImage: "key")
+                        }
+                        .disabled(setupAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                        if let setupMessage {
+                            Text(setupMessage)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else if appModel.notes.isEmpty {
+                    Section("First Note") {
+                        Text("Record a thought, paste text, or save a URL. Saved captures appear in Notes, Wiki, Insights, Review, Chat, Contradictions, and Mindmap after they are processed.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section("Voice") {
                     Button {
                         Task { await toggleRecording() }
@@ -21,7 +51,7 @@ struct CaptureView: View {
                         )
                     }
                     .foregroundStyle(appModel.audioRecorder.isRecording ? .red : .primary)
-                    .disabled(isSubmitting || !appModel.isAnthropicConfigured || !appModel.transcriptionService.isModelLoaded)
+                    .disabled(isSubmitting || !appModel.isAnthropicConfigured)
 
                     if appModel.audioRecorder.isRecording {
                         Text(formatDuration(appModel.audioRecorder.recordingDuration))
@@ -68,6 +98,18 @@ struct CaptureView: View {
                 }
             }
             .navigationTitle("Capture")
+        }
+    }
+
+    private func saveSetupAPIKey() {
+        do {
+            try appModel.saveAnthropicAPIKey(setupAPIKey)
+            setupAPIKey = ""
+            setupMessage = "Saved. You can now capture notes."
+            errorMessage = nil
+        } catch {
+            setupMessage = nil
+            errorMessage = error.localizedDescription
         }
     }
 

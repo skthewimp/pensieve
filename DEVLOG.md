@@ -1,5 +1,68 @@
 # Pensieve Dev Log
 
+## 2026-05-25 18:55 IST - whisper-startup-testflight-fix
+
+### User prompts
+
+> This is a new bug where, when I open the app, it doesn't load the Wispr model immediately. Even if I reload the app, the Wispr model doesn't open, and when I save some text input, then the Wispr model loads. I don't know what's happening. Can you check and debug?
+
+> ok good. now this needs to be available to testflight users also. this fix.
+
+> no still the "record voice note" button doesn't seem to wokr up on starting
+
+### Work done
+
+- Fixed WhisperKit startup loading by starting `transcriptionService.loadModel()` immediately in its own launch task instead of waiting behind local refresh and automatic backlink maintenance.
+- Removed the startup Whisper-loaded dependency from the record button so voice recording can begin immediately after launch.
+- Updated transcription to call `loadModel()` before transcribing, and to wait for any in-progress model load instead of failing with `modelNotLoaded`.
+- Bumped `CFBundleVersion` from `1` to `3` across replacement TestFlight builds while keeping version `0.1`.
+- Created a fresh Release archive at `build/Pensieve.xcarchive`.
+- Uploaded `Pensieve` version `0.1`, build `3` to App Store Connect; Xcode reported the uploaded package is processing.
+- Built and installed `Pensieve` version `0.1`, build `3` on `Karthik's iPhone` for immediate device testing.
+- Added first-run guidance in Capture for saving an Anthropic API key, a Getting Started checklist in Settings, and a README quick start for new users.
+- Rebuilt and reinstalled the Debug app on `Karthik's iPhone` after the onboarding changes.
+
+### Verification
+
+Debug simulator build succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -destination generic/platform=iOS\ Simulator -derivedDataPath build/DerivedData build
+```
+
+Release archive succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Release -destination generic/platform=iOS -archivePath build/Pensieve.xcarchive -allowProvisioningUpdates archive
+```
+
+App Store Connect upload succeeded with:
+
+```text
+xcodebuild -exportArchive -archivePath build/Pensieve.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/AppStoreUpload -allowProvisioningUpdates
+```
+
+Device Debug build and install succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -destination id=F48DFE9A-5C82-51A8-BA9F-24F5204D127F -derivedDataPath build/DeviceDerivedData build
+xcrun devicectl device install app --device F48DFE9A-5C82-51A8-BA9F-24F5204D127F build/DeviceDerivedData/Build/Products/Debug-iphoneos/Pensieve.app
+```
+
+Installed app verification on `Karthik's iPhone` showed:
+
+```text
+Pensieve com.karthikshashidhar.pensieve 0.1 3
+```
+
+Onboarding update verification:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -destination generic/platform=iOS\ Simulator -derivedDataPath build/DerivedData build
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -destination id=F48DFE9A-5C82-51A8-BA9F-24F5204D127F -derivedDataPath build/DeviceDerivedData build
+xcrun devicectl device install app --device F48DFE9A-5C82-51A8-BA9F-24F5204D127F build/DeviceDerivedData/Build/Products/Debug-iphoneos/Pensieve.app
+```
+
 ## 2026-05-20 22:55 IST - voice-lock-fix
 
 ### User prompts
