@@ -9,18 +9,27 @@ struct CaptureView: View {
     @State private var setupMessage: String?
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    @FocusState private var focusedField: CaptureField?
+
+    private enum CaptureField {
+        case setupAPIKey
+        case text
+        case url
+        case urlNote
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                if !appModel.isAnthropicConfigured {
+                if !appModel.isSelectedLLMConfigured {
                     Section("Start Here") {
-                        Text("Pensieve needs your Anthropic API key before it can turn voice, text, or URLs into structured notes. The key is stored in the iOS Keychain.")
+                        Text("Pensieve needs an API key for the selected LLM provider before it can turn voice, text, or URLs into structured notes. The key is stored in the iOS Keychain.")
                             .foregroundStyle(.secondary)
 
-                        SecureField("Anthropic API key", text: $setupAPIKey)
+                        SecureField("\(appModel.selectedLLMProvider.label) API key", text: $setupAPIKey)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
+                            .focused($focusedField, equals: .setupAPIKey)
 
                         Button {
                             saveSetupAPIKey()
@@ -51,7 +60,7 @@ struct CaptureView: View {
                         )
                     }
                     .foregroundStyle(appModel.audioRecorder.isRecording ? .red : .primary)
-                    .disabled(isSubmitting || !appModel.isAnthropicConfigured)
+                    .disabled(isSubmitting)
 
                     if appModel.audioRecorder.isRecording {
                         Text(formatDuration(appModel.audioRecorder.recordingDuration))
@@ -59,13 +68,19 @@ struct CaptureView: View {
                             .foregroundStyle(.red)
                     }
 
-                    Text("Whisper: \(appModel.transcriptionService.loadingProgress)")
+                    Text("Whisper model: \(appModel.transcriptionService.loadingProgress)")
                         .foregroundStyle(.secondary)
+
+                    if !appModel.isSelectedLLMConfigured {
+                        Text("Recording works without an LLM API key. Add a key for the selected provider before stopping if you want the recording processed into a note.")
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Text") {
                     TextEditor(text: $text)
                         .frame(minHeight: 120)
+                        .focused($focusedField, equals: .text)
 
                     Button {
                         Task { await submitText() }
@@ -79,8 +94,10 @@ struct CaptureView: View {
                     TextField("https://example.com", text: $urlText)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
+                        .focused($focusedField, equals: .url)
 
                     TextField("Optional note", text: $urlNote, axis: .vertical)
+                        .focused($focusedField, equals: .urlNote)
 
                     Button {
                         Task { await submitURL() }
@@ -97,13 +114,27 @@ struct CaptureView: View {
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        focusedField = nil
+                    }
+                }
+            }
             .navigationTitle("Capture")
         }
     }
 
     private func saveSetupAPIKey() {
         do {
-            try appModel.saveAnthropicAPIKey(setupAPIKey)
+            switch appModel.selectedLLMProvider {
+            case .anthropic:
+                try appModel.saveAnthropicAPIKey(setupAPIKey)
+            case .openAI:
+                try appModel.saveOpenAIAPIKey(setupAPIKey)
+            }
             setupAPIKey = ""
             setupMessage = "Saved. You can now capture notes."
             errorMessage = nil
@@ -164,8 +195,11 @@ struct CaptureView: View {
             return
         }
 
-        _ = await MainActor.run {
+        let recordingURL = await MainActor.run {
             appModel.audioRecorder.startRecording()
+        }
+        if recordingURL == nil {
+            errorMessage = "Could not start recording. Check microphone access in Settings."
         }
     }
 

@@ -31,6 +31,89 @@ protocol LLMProvider {
     func generateWikiTopicPage(topic: WikiTopic, notes: [MemoryNote]) async throws -> WikiTopic
 }
 
+enum LLMProviderKind: String, CaseIterable, Identifiable {
+    case anthropic
+    case openAI
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .anthropic:
+            return "Anthropic"
+        case .openAI:
+            return "OpenAI"
+        }
+    }
+}
+
+final class LLMProviderRouter: LLMProvider {
+    private let anthropic: AnthropicProvider
+    private let openAI: OpenAIProvider
+    private let defaults: UserDefaults
+    private let selectedProviderKey = "selected-llm-provider"
+
+    init(keychain: KeychainService, defaults: UserDefaults = .standard) {
+        self.anthropic = AnthropicProvider(keychain: keychain)
+        self.openAI = OpenAIProvider(keychain: keychain, defaults: defaults)
+        self.defaults = defaults
+    }
+
+    var selectedKind: LLMProviderKind {
+        get {
+            guard let rawValue = defaults.string(forKey: selectedProviderKey),
+                  let kind = LLMProviderKind(rawValue: rawValue) else {
+                return .anthropic
+            }
+            return kind
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: selectedProviderKey)
+        }
+    }
+
+    private var current: LLMProvider {
+        switch selectedKind {
+        case .anthropic:
+            return anthropic
+        case .openAI:
+            return openAI
+        }
+    }
+
+    func processCapture(_ input: CaptureProcessingInput) async throws -> CaptureProcessingResult {
+        try await current.processCapture(input)
+    }
+
+    func chat(_ request: ChatRequest) async throws -> ChatResponse {
+        try await current.chat(request)
+    }
+
+    func findContradictions(in notes: [MemoryNote]) async throws -> [Contradiction] {
+        try await current.findContradictions(in: notes)
+    }
+
+    func analyzeCorpus(_ notes: [MemoryNote]) async throws -> [Insight] {
+        try await current.analyzeCorpus(notes)
+    }
+
+    func generateWeeklyDigest(from notes: [MemoryNote]) async throws -> Insight {
+        try await current.generateWeeklyDigest(from: notes)
+    }
+
+    func generateNoteConnections(from notes: [MemoryNote]) async throws -> [NoteConnection] {
+        try await current.generateNoteConnections(from: notes)
+    }
+
+    func cleanUpTopics(_ notes: [MemoryNote]) async throws -> TopicCleanupResult {
+        try await current.cleanUpTopics(notes)
+    }
+
+    func generateWikiTopicPage(topic: WikiTopic, notes: [MemoryNote]) async throws -> WikiTopic {
+        try await current.generateWikiTopicPage(topic: topic, notes: notes)
+    }
+}
+
 struct AnthropicProcessedNote: Codable {
     let title: String
     let summary: [String]
@@ -166,6 +249,405 @@ enum AnthropicError: LocalizedError {
         case .invalidJSON(let message):
             return message
         }
+    }
+}
+
+enum OpenAIProviderError: LocalizedError {
+    case apiKeyMissing
+    case apiError(statusCode: Int, message: String)
+    case noTextInResponse
+    case invalidJSON(String = "Could not parse OpenAI response.")
+
+    var errorDescription: String? {
+        switch self {
+        case .apiKeyMissing:
+            return "Add your OpenAI API key in Settings."
+        case .apiError(let statusCode, let message):
+            return "OpenAI API error (\(statusCode)): \(message)"
+        case .noTextInResponse:
+            return "OpenAI returned no text response."
+        case .invalidJSON(let message):
+            return message
+        }
+    }
+}
+
+struct OpenAIProvider: LLMProvider {
+    private let keychain: KeychainService
+    private let defaults: UserDefaults
+    private let modelKey = "openai-llm-model"
+    private let baseURL = URL(string: "https://api.openai.com/v1/responses")!
+
+    init(keychain: KeychainService, defaults: UserDefaults = .standard) {
+        self.keychain = keychain
+        self.defaults = defaults
+    }
+
+    var model: String {
+        let stored = defaults.string(forKey: modelKey)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return stored?.isEmpty == false ? stored! : "gpt-5-mini"
+    }
+
+    func processCapture(_ input: CaptureProcessingInput) async throws -> CaptureProcessingResult {
+        let text = try await generateText(
+            system: Self.captureSystemPrompt(kind: input.capture.kind),
+            user: Self.captureUserMessage(text: input.normalizedText, urls: input.capture.sourceURLs, kind: input.capture.kind),
+            maxTokens: 2048
+        )
+        let jsonData = try Self.jsonData(from: text)
+        let processed = try JSONDecoder().decode(AnthropicProcessedNote.self, from: jsonData)
+        let note = MemoryNote(
+            captureID: input.capture.id,
+            title: processed.title,
+            summary: processed.summary.joined(separator: "\n"),
+            body: Self.noteBody(input: input, processed: processed),
+            themes: processed.themes,
+            emotionalTone: processed.emotionalTone
+        )
+        return CaptureProcessingResult(note: note, articleFetched: nil)
+    }
+
+    func chat(_ request: ChatRequest) async throws -> ChatResponse {
+        let context = request.contextNotes.map { note in
+            """
+            Note ID: \(note.id.uuidString)
+            Title: \(note.title)
+            Themes: \(note.themes.joined(separator: ", "))
+            Summary:
+            \(note.summary)
+            Body:
+            \(note.body)
+            """
+        }.joined(separator: "\n\n---\n\n")
+
+        let answer = try await generateText(
+            system: "You answer questions for a local-first personal memory app. Use the supplied notes as source material. If the notes do not contain enough evidence, say so directly. Be concise and cite note titles in plain language.",
+            user: """
+            Question:
+            \(request.question)
+
+            Available notes:
+            \(context.isEmpty ? "(no saved notes yet)" : context)
+            """,
+            maxTokens: 2048
+        )
+        return ChatResponse(answer: answer, contextNoteIDs: request.contextNotes.map(\.id))
+    }
+
+    func findContradictions(in notes: [MemoryNote]) async throws -> [Contradiction] {
+        let text = try await generateText(
+            system: """
+            Return only JSON: {"contradictions":[{"topic":"short topic","beforeNoteID":"uuid or null","afterNoteID":"uuid or null","explanation":"one or two sentences","confidence":0.0}]}.
+            Find only source-backed contradictions, changed beliefs, recurring tensions, or shifts in priorities. Use only supplied note IDs. Return an empty array if evidence is thin.
+            """,
+            user: notes.sorted { $0.createdAt < $1.createdAt }.map(Self.noteDigest).joined(separator: "\n\n---\n\n"),
+            maxTokens: 8192
+        )
+        let response = try JSONDecoder().decode(AnthropicContradictionsResponse.self, from: Self.jsonData(from: text))
+        return response.contradictions
+            .filter { !$0.topic.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .filter { !$0.explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map {
+                Contradiction(
+                    id: UUID(),
+                    topic: $0.topic,
+                    beforeNoteID: $0.beforeNoteID,
+                    afterNoteID: $0.afterNoteID,
+                    explanation: $0.explanation,
+                    status: .unresolved,
+                    confidence: $0.confidence,
+                    createdAt: Date(),
+                    updatedAt: Date()
+                )
+            }
+    }
+
+    func analyzeCorpus(_ notes: [MemoryNote]) async throws -> [Insight] {
+        let text = try await generateText(
+            system: Self.insightSystemPrompt(kind: "insights", countRule: "Include 5 to 15 insights if evidence supports them."),
+            user: notes.sorted { $0.createdAt < $1.createdAt }.map(Self.noteDigest).joined(separator: "\n\n---\n\n"),
+            maxTokens: 8192
+        )
+        return try Self.decodeInsights(text, validNoteIDs: Set(notes.map(\.id)), forcedKind: nil)
+    }
+
+    func generateWeeklyDigest(from notes: [MemoryNote]) async throws -> Insight {
+        let calendar = Calendar.current
+        let endDate = Date()
+        let startDate = calendar.date(byAdding: .day, value: -7, to: endDate) ?? endDate
+        let weeklyNotes = notes.filter { $0.createdAt >= startDate && $0.createdAt <= endDate }
+        guard !weeklyNotes.isEmpty else {
+            throw OpenAIProviderError.invalidJSON("No notes from the last 7 days to digest.")
+        }
+
+        let text = try await generateText(
+            system: Self.insightSystemPrompt(kind: "weekly digest", countRule: "Return exactly one insight. The kind must be weeklyDigest."),
+            user: weeklyNotes.sorted { $0.createdAt < $1.createdAt }.map(Self.noteDigest).joined(separator: "\n\n---\n\n"),
+            maxTokens: 3072
+        )
+        guard let insight = try Self.decodeInsights(text, validNoteIDs: Set(weeklyNotes.map(\.id)), forcedKind: .weeklyDigest).first else {
+            throw OpenAIProviderError.invalidJSON("OpenAI returned no weekly digest.")
+        }
+        return insight
+    }
+
+    func generateNoteConnections(from notes: [MemoryNote]) async throws -> [NoteConnection] {
+        let sampled = Array(notes.sorted { $0.createdAt > $1.createdAt }.prefix(80))
+        guard sampled.count >= 2 else {
+            throw OpenAIProviderError.invalidJSON("At least two notes are needed to generate retrospective connections.")
+        }
+        let text = try await generateText(
+            system: """
+            Return only JSON: {"connections":[{"kind":"backlink","title":"short title","explanation":"one or two sentences","sourceNoteIDs":["uuid"],"themes":["theme"],"confidence":0.0}]}.
+            Find non-obvious backlinks or threads in the supplied notes. Each connection must cite at least two supplied note IDs.
+            """,
+            user: sampled.sorted { $0.createdAt < $1.createdAt }.map(Self.noteDigest).joined(separator: "\n\n---\n\n"),
+            maxTokens: 8192
+        )
+        let response = try JSONDecoder().decode(AnthropicNoteConnectionsResponse.self, from: Self.jsonData(from: text))
+        let valid = Set(sampled.map(\.id))
+        return response.connections.map { raw in
+            NoteConnection(
+                kind: raw.kind,
+                title: raw.title,
+                explanation: raw.explanation,
+                sourceNoteIDs: raw.sourceNoteIDs.filter { valid.contains($0) },
+                themes: raw.themes.map(Self.normalized).filter { !$0.isEmpty },
+                confidence: min(1, max(0, raw.confidence ?? 0.7))
+            )
+        }
+        .filter { $0.sourceNoteIDs.count >= 2 && !$0.title.isEmpty && !$0.explanation.isEmpty }
+    }
+
+    func cleanUpTopics(_ notes: [MemoryNote]) async throws -> TopicCleanupResult {
+        let sampled = Array(notes.sorted { $0.createdAt > $1.createdAt }.prefix(48))
+        let text = try await generateText(
+            system: """
+            Return only JSON: {"topics":[{"title":"Career","canonicalTheme":"career","aliases":["work"],"summary":"one sentence","currentUnderstanding":"one paragraph","recurringSubthemes":[],"openQuestions":[],"sourceNoteIDs":["uuid"],"relatedThemes":[]}],"noteThemeAssignments":[]}.
+            Consolidate overlapping themes into 10 to 14 durable navigation topics. Use only supplied note IDs.
+            """,
+            user: sampled.map(Self.noteDigest).joined(separator: "\n\n---\n\n"),
+            maxTokens: 4096
+        )
+        let response = try JSONDecoder().decode(AnthropicTopicCleanupResponse.self, from: Self.jsonData(from: text))
+        let valid = Set(notes.map(\.id))
+        let topics = response.topics.compactMap { raw -> WikiTopic? in
+            let canonicalTheme = Self.normalized(raw.canonicalTheme)
+            guard !canonicalTheme.isEmpty, !raw.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return WikiTopic(
+                title: raw.title,
+                canonicalTheme: canonicalTheme,
+                aliases: raw.aliases.map(Self.normalized).filter { !$0.isEmpty && $0 != canonicalTheme },
+                summary: raw.summary.isEmpty ? "Notes grouped around \(canonicalTheme)." : raw.summary,
+                currentUnderstanding: raw.currentUnderstanding.isEmpty ? raw.summary : raw.currentUnderstanding,
+                recurringSubthemes: raw.recurringSubthemes,
+                openQuestions: raw.openQuestions,
+                sourceNoteIDs: raw.sourceNoteIDs.filter { valid.contains($0) },
+                relatedThemes: raw.relatedThemes.map(Self.normalized).filter { !$0.isEmpty }
+            )
+        }
+        guard !topics.isEmpty else {
+            throw OpenAIProviderError.invalidJSON("OpenAI returned no usable topics.")
+        }
+        let canonicalThemes = Set(topics.map(\.canonicalTheme))
+        let assignments = response.noteThemeAssignments.compactMap { raw -> TopicThemeAssignment? in
+            guard let noteID = raw.noteID, valid.contains(noteID) else { return nil }
+            let themes = raw.themes.map(Self.normalized).filter { canonicalThemes.contains($0) }
+            guard !themes.isEmpty else { return nil }
+            return TopicThemeAssignment(noteID: noteID, themes: themes)
+        }
+        return TopicCleanupResult(topics: topics, assignments: assignments)
+    }
+
+    func generateWikiTopicPage(topic: WikiTopic, notes: [MemoryNote]) async throws -> WikiTopic {
+        let text = try await generateText(
+            system: """
+            Return only JSON: {"title":"topic","summary":"one sentence","currentUnderstanding":"2-5 concise paragraphs","recurringSubthemes":["subtheme"],"openQuestions":["question"],"relatedThemes":["theme"]}.
+            Build one source-backed wiki topic page using only supplied notes.
+            """,
+            user: """
+            Topic: \(topic.title)
+            Canonical theme: \(topic.canonicalTheme)
+            Aliases: \(topic.aliases.joined(separator: ", "))
+
+            Source notes:
+            \(notes.sorted { $0.createdAt > $1.createdAt }.prefix(30).map(Self.noteDigest).joined(separator: "\n\n---\n\n"))
+            """,
+            maxTokens: 2048
+        )
+        let response = try JSONDecoder().decode(AnthropicWikiTopicPageResponse.self, from: Self.jsonData(from: text))
+        var updated = topic
+        updated.title = response.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? topic.title : response.title
+        updated.summary = response.summary
+        updated.currentUnderstanding = response.currentUnderstanding
+        updated.recurringSubthemes = response.recurringSubthemes
+        updated.openQuestions = response.openQuestions
+        updated.relatedThemes = response.relatedThemes.map(Self.normalized).filter { !$0.isEmpty }
+        updated.updatedAt = Date()
+        return updated
+    }
+
+    private func generateText(system: String, user: String, maxTokens: Int) async throws -> String {
+        guard let apiKey = keychain.loadOpenAIAPIKey() else {
+            throw OpenAIProviderError.apiKeyMissing
+        }
+
+        let body: [String: Any] = [
+            "model": model,
+            "instructions": system,
+            "input": user,
+            "max_output_tokens": maxTokens
+        ]
+
+        var request = URLRequest(url: baseURL)
+        request.httpMethod = "POST"
+        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "content-type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let responseBody = String(data: data, encoding: .utf8) ?? "no body"
+            throw OpenAIProviderError.apiError(statusCode: statusCode, message: responseBody)
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw OpenAIProviderError.invalidJSON()
+        }
+        let text = Self.extractText(from: json).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            throw OpenAIProviderError.noTextInResponse
+        }
+        return text
+    }
+
+    private static func extractText(from json: [String: Any]) -> String {
+        if let outputText = json["output_text"] as? String {
+            return outputText
+        }
+        guard let output = json["output"] as? [[String: Any]] else { return "" }
+        return output.flatMap { item -> [String] in
+            guard let content = item["content"] as? [[String: Any]] else { return [] }
+            return content.compactMap { contentItem in
+                if let text = contentItem["text"] as? String {
+                    return text
+                }
+                if let text = contentItem["output_text"] as? String {
+                    return text
+                }
+                return nil
+            }
+        }.joined(separator: "\n\n")
+    }
+
+    private static func captureSystemPrompt(kind: CaptureKind) -> String {
+        let urlInstruction = kind == .url ? "For URLs, use the provided URL text and user note; do not claim to have fetched the page unless supplied text includes it." : ""
+        return """
+        You are processing a thought capture for a local-first memory app called Pensieve. Return only JSON with exactly: {"title":"3-5 word title","summary":["bullet"],"themes":["theme"],"emotionalTone":"neutral","keyQuotes":["quote"],"connections":["connection"]}.
+        Themes must be lowercase simple words. Emotional tone must be one of reflective, anxious, excited, frustrated, hopeful, confused, determined, sad, neutral, angry, grateful.
+        \(urlInstruction)
+        """
+    }
+
+    private static func captureUserMessage(text: String, urls: [URL], kind: CaptureKind) -> String {
+        switch kind {
+        case .voice:
+            return "Process this voice note transcription:\n\n\(text)"
+        case .text:
+            return "Process this typed thought:\n\n\(text)"
+        case .url:
+            return "URLs:\n\(urls.map { "- \($0.absoluteString)" }.joined(separator: "\n"))\n\nUser's take:\n\(text)"
+        }
+    }
+
+    private static func insightSystemPrompt(kind: String, countRule: String) -> String {
+        """
+        Return only JSON: {"insights":[{"kind":"pattern","title":"short title","explanation":"source-grounded explanation","sourceNoteIDs":["uuid"],"themes":["theme"],"confidence":0.0}]}.
+        Generate \(kind) for a local-first memory app. Allowed kind values: themeSummary, pattern, openLoop, question, decision, beliefShift, weeklyDigest. \(countRule) Use only supplied note IDs and do not invent facts.
+        """
+    }
+
+    private static func decodeInsights(_ text: String, validNoteIDs: Set<UUID>, forcedKind: InsightKind?) throws -> [Insight] {
+        let response = try JSONDecoder().decode(AnthropicInsightsResponse.self, from: jsonData(from: text))
+        return response.insights.compactMap { raw in
+            let sourceNoteIDs = raw.sourceNoteIDs.filter { validNoteIDs.contains($0) }
+            guard !sourceNoteIDs.isEmpty else { return nil }
+            return Insight(
+                kind: forcedKind ?? raw.kind,
+                title: raw.title,
+                explanation: raw.explanation,
+                sourceNoteIDs: sourceNoteIDs,
+                themes: raw.themes.map(normalized).filter { !$0.isEmpty },
+                confidence: raw.confidence
+            )
+        }
+        .filter { !$0.title.isEmpty && !$0.explanation.isEmpty }
+    }
+
+    private static func noteBody(input: CaptureProcessingInput, processed: AnthropicProcessedNote) -> String {
+        let quotes = processed.keyQuotes.isEmpty ? "No notable quotes extracted." : processed.keyQuotes.map { "> \($0)" }.joined(separator: "\n\n")
+        let connections = processed.connections.isEmpty ? "No connections extracted." : processed.connections.map { "- \($0)" }.joined(separator: "\n")
+        let sources = input.capture.sourceURLs.isEmpty ? "" : "\n\n## Sources\n" + input.capture.sourceURLs.map { "- \($0.absoluteString)" }.joined(separator: "\n")
+        return """
+        ## Summary
+        \(processed.summary.map { "- \($0)" }.joined(separator: "\n"))
+
+        ## Key Quotes
+        \(quotes)
+
+        ## Connections
+        \(connections)
+
+        ## Raw Input
+        \(input.normalizedText)
+        \(sources)
+        """
+    }
+
+    private static func noteDigest(_ note: MemoryNote) -> String {
+        """
+        ID: \(note.id.uuidString)
+        Date: \(ISO8601DateFormatter().string(from: note.createdAt))
+        Title: \(note.title)
+        Themes: \(note.themes.joined(separator: ", "))
+        Summary:
+        \(note.summary)
+        Excerpt:
+        \(note.body.prefix(900))
+        """
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func jsonData(from text: String) throws -> Data {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutFence: String
+        if trimmed.hasPrefix("```") {
+            let lines = trimmed.components(separatedBy: "\n")
+            withoutFence = lines.dropFirst().dropLast().joined(separator: "\n")
+        } else {
+            withoutFence = trimmed
+        }
+
+        let objectStart = withoutFence.firstIndex(of: "{")
+        let arrayStart = withoutFence.firstIndex(of: "[")
+        let start = [objectStart, arrayStart].compactMap { $0 }.min()
+        let jsonString: String
+        if let start, withoutFence[start] == "{", let end = withoutFence.lastIndex(of: "}") {
+            jsonString = String(withoutFence[start...end])
+        } else if let start, withoutFence[start] == "[", let end = withoutFence.lastIndex(of: "]") {
+            jsonString = String(withoutFence[start...end])
+        } else {
+            jsonString = withoutFence
+        }
+
+        guard let data = jsonString.data(using: .utf8) else {
+            throw OpenAIProviderError.invalidJSON()
+        }
+        return data
     }
 }
 

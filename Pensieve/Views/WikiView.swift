@@ -256,7 +256,7 @@ struct WikiTopicView: View {
                 } label: {
                     Label("Refresh Now", systemImage: "arrow.clockwise")
                 }
-                .disabled(isRefreshing || !appModel.isAnthropicConfigured)
+                .disabled(isRefreshing || !appModel.isSelectedLLMConfigured)
 
                 Button {
                     updateTopicStatus(.useful)
@@ -343,7 +343,7 @@ struct WikiTopicView: View {
                 } label: {
                     Label("Refresh Now", systemImage: "arrow.clockwise")
                 }
-                .disabled(isRefreshing || !appModel.isAnthropicConfigured)
+                .disabled(isRefreshing || !appModel.isSelectedLLMConfigured)
             }
         }
     }

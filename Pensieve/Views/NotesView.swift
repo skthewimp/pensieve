@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 struct NotesView: View {
@@ -52,6 +53,9 @@ struct NotesView: View {
 struct NoteDetailView: View {
     @EnvironmentObject private var appModel: AppModel
     let note: MemoryNote
+    @State private var audioPlayer: AVAudioPlayer?
+    @State private var isPlayingAudio = false
+    @State private var audioMessage: String?
 
     private var relatedNotes: [MemoryNote] {
         let noteThemes = Set(note.themes.map(normalizedTheme).filter { !$0.isEmpty })
@@ -88,6 +92,10 @@ struct NoteDetailView: View {
             }
     }
 
+    private var sourceCapture: Capture? {
+        appModel.captures.first { $0.id == note.captureID }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -95,6 +103,24 @@ struct NoteDetailView: View {
                     .font(.headline)
 
                 Text(note.body)
+
+                if let audioFilePath = sourceCapture?.audioFilePath {
+                    Divider()
+                    Text("Audio")
+                        .font(.headline)
+
+                    Button {
+                        toggleAudioPlayback(path: audioFilePath)
+                    } label: {
+                        Label(isPlayingAudio ? "Stop Recording Playback" : "Play Recording", systemImage: isPlayingAudio ? "stop.circle" : "play.circle")
+                    }
+
+                    if let audioMessage {
+                        Text(audioMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 if !note.themes.isEmpty {
                     Divider()
@@ -157,6 +183,39 @@ struct NoteDetailView: View {
             .padding()
         }
         .navigationTitle(note.title)
+        .onDisappear {
+            audioPlayer?.stop()
+            isPlayingAudio = false
+        }
+    }
+
+    private func toggleAudioPlayback(path: String) {
+        if isPlayingAudio {
+            audioPlayer?.stop()
+            audioPlayer = nil
+            isPlayingAudio = false
+            audioMessage = nil
+            return
+        }
+
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            audioMessage = "Audio file is no longer available on this device."
+            return
+        }
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default)
+            try session.setActive(true)
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.play()
+            audioPlayer = player
+            isPlayingAudio = true
+            audioMessage = url.lastPathComponent
+        } catch {
+            audioMessage = error.localizedDescription
+        }
     }
 
     private func searchableText(for note: MemoryNote) -> String {

@@ -1,5 +1,127 @@
 # Pensieve Dev Log
 
+## 2026-05-26 19:00 IST - multi-provider-testflight-plan-implementation
+
+### User prompts
+
+> here is some feedback from one of the testflight users of this app. figure out a development plan b ased on this [...]
+
+> actually even for the LLM processing - we should go beyond Anthropic only. things like chatgpt / openai key / any open model / ...
+
+> one more thing - existing installations need to continue to work seamlessly
+
+> Implement the plan.
+
+### Work done
+
+- Added backward-compatible provider routing for LLM processing:
+  - Existing installs continue to default to Anthropic and keep using the existing `anthropic-api-key` Keychain account.
+  - New OpenAI API key storage and an OpenAI-backed `LLMProvider` implementation were added behind the existing provider boundary.
+- Added configurable transcription providers:
+  - On-device WhisperKit remains the default.
+  - OpenAI and Sarvam transcription paths are available through Settings with separate Keychain-backed keys.
+- Added explicit key deletion controls for Anthropic, OpenAI, and Sarvam.
+- Fixed the Capture keyboard trap by adding focus tracking, interactive keyboard dismissal, and a keyboard `Done` toolbar.
+- Added voice recording playback from note detail pages using the note's source capture audio path.
+- Updated chat, wiki refresh, and periodic backlink maintenance gates to follow the selected LLM provider instead of assuming Anthropic.
+- Bumped the app build number to `5`.
+
+### Verification
+
+Whitespace check succeeded with:
+
+```text
+git diff --check
+```
+
+Simulator build succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -destination generic/platform=iOS\ Simulator -derivedDataPath build/DerivedData build
+```
+
+Simulator install and launch succeeded on simulator `02D60233-6BDD-4769-8D69-D8EE37AEAF3E` with:
+
+```text
+xcrun simctl install 02D60233-6BDD-4769-8D69-D8EE37AEAF3E build/DerivedData/Build/Products/Debug-iphonesimulator/Pensieve.app
+xcrun simctl launch --terminate-running-process 02D60233-6BDD-4769-8D69-D8EE37AEAF3E com.karthikshashidhar.pensieve
+```
+
+Generic iOS Debug build also succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -destination generic/platform=iOS -derivedDataPath build/DeviceDerivedData build
+```
+
+Physical iPhone install and launch succeeded on `Karthik's iPhone` (`F48DFE9A-5C82-51A8-BA9F-24F5204D127F`) with:
+
+```text
+xcrun devicectl device install app --device F48DFE9A-5C82-51A8-BA9F-24F5204D127F build/DeviceDerivedData/Build/Products/Debug-iphoneos/Pensieve.app
+xcrun devicectl device process launch --device F48DFE9A-5C82-51A8-BA9F-24F5204D127F com.karthikshashidhar.pensieve
+```
+
+Built app plist verification showed `CFBundleVersion` `5`.
+
+Release archive succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Release -destination generic/platform=iOS -archivePath build/Pensieve.xcarchive -allowProvisioningUpdates archive
+```
+
+App Store Connect export/upload succeeded with:
+
+```text
+xcodebuild -exportArchive -archivePath build/Pensieve.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/AppStoreUpload -allowProvisioningUpdates
+```
+
+Xcode reported: `Uploaded package is processing.`
+
+## 2026-05-25 20:21 IST - tester-recording-permission-fix
+
+### User prompts
+
+> So pensive does not ask for recording/mic permissions.
+
+> Also. May want to write that whisper model is downloaded. and also apparently the record button is still not clickable. are you sure this version is updated?
+
+### Work done
+
+- Found that the Capture voice button was still disabled when the Anthropic API key was missing, which prevented first-time testers from tapping it and seeing the iOS microphone permission prompt.
+- Removed the API-key gate from voice recording while keeping the processing dependency explicit in the Capture UI.
+- Changed the Whisper status copy from `Ready` to `Downloaded and ready`.
+- Surfaced a recorder-start failure message if iOS permission or audio-session setup blocks recording.
+- Bumped `CFBundleVersion` from `3` to `4` so the next installed/TestFlight build is visibly newer than the tester's current build.
+
+### Verification
+
+Simulator build succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -destination generic/platform=iOS\ Simulator -derivedDataPath build/DerivedData build
+```
+
+Device Debug build and install succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -destination id=F48DFE9A-5C82-51A8-BA9F-24F5204D127F -derivedDataPath build/DeviceDerivedData build
+xcrun devicectl device install app --device F48DFE9A-5C82-51A8-BA9F-24F5204D127F build/DeviceDerivedData/Build/Products/Debug-iphoneos/Pensieve.app
+```
+
+Installed app verification on `Karthik's iPhone` showed:
+
+```text
+Pensieve com.karthikshashidhar.pensieve 0.1 4
+```
+
+Release archive and App Store Connect upload succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Release -destination generic/platform=iOS -archivePath build/Pensieve.xcarchive -allowProvisioningUpdates archive
+xcodebuild -exportArchive -archivePath build/Pensieve.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/AppStoreUpload -allowProvisioningUpdates
+```
+
+Xcode reported: `Uploaded package is processing.`
+
 ## 2026-05-25 18:55 IST - whisper-startup-testflight-fix
 
 ### User prompts

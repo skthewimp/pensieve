@@ -48,7 +48,7 @@ struct ChatView: View {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
                     }
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending || !appModel.isAnthropicConfigured)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSending || !appModel.isSelectedLLMConfigured)
                 }
                 .padding()
 
@@ -62,7 +62,7 @@ struct ChatView: View {
             }
             .overlay {
                 if appModel.chatMessages.isEmpty {
-                    ContentUnavailableView("No Chat Yet", systemImage: "bubble.left.and.bubble.right", description: Text("Chat will use local retrieval plus Anthropic."))
+                    ContentUnavailableView("No Chat Yet", systemImage: "bubble.left.and.bubble.right", description: Text("Chat will use local retrieval plus the selected LLM provider."))
                 }
             }
             .navigationTitle("Chat")

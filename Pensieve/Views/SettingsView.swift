@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var apiKey = ""
+    @State private var openAIAPIKey = ""
+    @State private var sarvamAPIKey = ""
     @State private var saveMessage: String?
     @State private var errorMessage: String?
     @State private var importMessage: String?
@@ -25,29 +27,85 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Getting Started") {
-                    GettingStartedStep(number: 1, text: "Save your Anthropic API key.")
+                    GettingStartedStep(number: 1, text: "Choose an LLM provider and save its API key.")
                     GettingStartedStep(number: 2, text: "Capture voice, text, or URLs from the Capture tab.")
                     GettingStartedStep(number: 3, text: "Use Notes and Wiki to browse saved memory.")
                     GettingStartedStep(number: 4, text: "Use Chat to ask questions over your notes.")
                     GettingStartedStep(number: 5, text: "Run analysis tools here when you want digests, links, insights, topic cleanup, or contradictions.")
                 }
 
-                Section("Anthropic") {
-                    SecureField("API key", text: $apiKey)
+                Section("AI Processing") {
+                    Picker("LLM provider", selection: Binding(
+                        get: { appModel.selectedLLMProvider },
+                        set: { appModel.setLLMProvider($0) }
+                    )) {
+                        ForEach(LLMProviderKind.allCases) { provider in
+                            Text(provider.label).tag(provider)
+                        }
+                    }
+
+                    Text("Capture processing, chat, insights, topic cleanup, and contradictions use the selected LLM provider.")
+                        .foregroundStyle(.secondary)
+
+                    SecureField("Anthropic API key", text: $apiKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    Button {
-                        saveAPIKey()
-                    } label: {
-                        Label("Save API Key", systemImage: "key")
+                    HStack {
+                        Button {
+                            saveAPIKey()
+                        } label: {
+                            Label("Save Anthropic Key", systemImage: "key")
+                        }
+
+                        Button(role: .destructive) {
+                            deleteAnthropicAPIKey()
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .disabled(!appModel.isAnthropicConfigured)
                     }
 
                     if appModel.isAnthropicConfigured {
-                        Label("API key configured", systemImage: "checkmark.circle.fill")
+                        Label("Anthropic key configured", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                     } else {
-                        Label("API key required for processing", systemImage: "exclamationmark.circle")
+                        Label("Anthropic key not configured", systemImage: "exclamationmark.circle")
+                            .foregroundStyle(.orange)
+                    }
+
+                    SecureField("OpenAI API key", text: $openAIAPIKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    HStack {
+                        Button {
+                            saveOpenAIAPIKey()
+                        } label: {
+                            Label("Save OpenAI Key", systemImage: "key")
+                        }
+
+                        Button(role: .destructive) {
+                            deleteOpenAIAPIKey()
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .disabled(!appModel.isOpenAIConfigured)
+                    }
+
+                    if appModel.isOpenAIConfigured {
+                        Label("OpenAI key configured", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    } else {
+                        Label("OpenAI key not configured", systemImage: "exclamationmark.circle")
+                            .foregroundStyle(.orange)
+                    }
+
+                    if appModel.isSelectedLLMConfigured {
+                        Label("\(appModel.selectedLLMProvider.label) ready", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    } else {
+                        Label("Selected LLM provider needs an API key", systemImage: "exclamationmark.circle")
                             .foregroundStyle(.orange)
                     }
 
@@ -62,8 +120,49 @@ struct SettingsView: View {
                     }
                 }
 
+                Section("Transcription") {
+                    Picker("Provider", selection: Binding(
+                        get: { appModel.selectedTranscriptionProvider },
+                        set: { appModel.setTranscriptionProvider($0) }
+                    )) {
+                        ForEach(TranscriptionProviderKind.allCases) { provider in
+                            Text(provider.label).tag(provider)
+                        }
+                    }
+
+                    Text("Voice recordings can be transcribed on device, or sent to a selected cloud transcription provider.")
+                        .foregroundStyle(.secondary)
+
+                    SecureField("Sarvam API key", text: $sarvamAPIKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    HStack {
+                        Button {
+                            saveSarvamAPIKey()
+                        } label: {
+                            Label("Save Sarvam Key", systemImage: "key")
+                        }
+
+                        Button(role: .destructive) {
+                            deleteSarvamAPIKey()
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .disabled(!appModel.isSarvamConfigured)
+                    }
+
+                    if appModel.isSarvamConfigured {
+                        Label("Sarvam key configured", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    } else {
+                        Label("Sarvam key not configured", systemImage: "exclamationmark.circle")
+                            .foregroundStyle(.orange)
+                    }
+                }
+
                 Section("Privacy") {
-                    Text("Audio stays on device. Transcription happens on device. Text selected for processing is sent to Anthropic using your API key.")
+                    Text("Audio stays on device only when On-device Whisper is selected. Cloud transcription sends audio to the selected transcription provider. Text selected for processing is sent to the selected LLM provider using your API key.")
                 }
 
                 Section("Backup") {
@@ -101,28 +200,28 @@ struct SettingsView: View {
                     } label: {
                         Label("Generate Weekly Digest", systemImage: "calendar.badge.clock")
                     }
-                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isAnthropicConfigured)
+                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isSelectedLLMConfigured)
 
                     Button {
                         connectNotesRetrospectively()
                     } label: {
                         Label("Connect Notes Retrospectively", systemImage: "link")
                     }
-                    .disabled(isAnalyzing || appModel.notes.count < 2 || !appModel.isAnthropicConfigured)
+                    .disabled(isAnalyzing || appModel.notes.count < 2 || !appModel.isSelectedLLMConfigured)
 
                     Button {
                         analyzeCorpus()
                     } label: {
                         Label("Analyze Corpus", systemImage: "sparkles")
                     }
-                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isAnthropicConfigured)
+                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isSelectedLLMConfigured)
 
                     Button {
                         prepareTopicCleanupPreview()
                     } label: {
                         Label("Preview Topic Cleanup", systemImage: "rectangle.3.group")
                     }
-                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isAnthropicConfigured)
+                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isSelectedLLMConfigured)
 
                     if let topicCleanupPreview {
                         TopicCleanupDiagnosticsView(
@@ -155,7 +254,7 @@ struct SettingsView: View {
                     } label: {
                         Label("Find Contradictions", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .disabled(isAnalyzing || appModel.notes.isEmpty)
+                    .disabled(isAnalyzing || appModel.notes.isEmpty || !appModel.isSelectedLLMConfigured)
 
                     if isAnalyzing {
                         ProgressView("Analyzing notes...")
@@ -215,7 +314,67 @@ struct SettingsView: View {
         do {
             try appModel.saveAnthropicAPIKey(apiKey)
             apiKey = ""
-            saveMessage = appModel.isAnthropicConfigured ? "Saved." : "Removed."
+            saveMessage = appModel.isAnthropicConfigured ? "Anthropic key saved." : "Anthropic key removed."
+            errorMessage = nil
+        } catch {
+            saveMessage = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteAnthropicAPIKey() {
+        do {
+            try appModel.deleteAnthropicAPIKey()
+            apiKey = ""
+            saveMessage = "Anthropic key deleted."
+            errorMessage = nil
+        } catch {
+            saveMessage = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveOpenAIAPIKey() {
+        do {
+            try appModel.saveOpenAIAPIKey(openAIAPIKey)
+            openAIAPIKey = ""
+            saveMessage = appModel.isOpenAIConfigured ? "OpenAI key saved." : "OpenAI key removed."
+            errorMessage = nil
+        } catch {
+            saveMessage = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteOpenAIAPIKey() {
+        do {
+            try appModel.deleteOpenAIAPIKey()
+            openAIAPIKey = ""
+            saveMessage = "OpenAI key deleted."
+            errorMessage = nil
+        } catch {
+            saveMessage = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveSarvamAPIKey() {
+        do {
+            try appModel.saveSarvamAPIKey(sarvamAPIKey)
+            sarvamAPIKey = ""
+            saveMessage = appModel.isSarvamConfigured ? "Sarvam key saved." : "Sarvam key removed."
+            errorMessage = nil
+        } catch {
+            saveMessage = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteSarvamAPIKey() {
+        do {
+            try appModel.deleteSarvamAPIKey()
+            sarvamAPIKey = ""
+            saveMessage = "Sarvam key deleted."
             errorMessage = nil
         } catch {
             saveMessage = nil

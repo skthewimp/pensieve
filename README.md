@@ -9,13 +9,13 @@ calls for note processing, chat, and contradiction analysis.
 
 Built and tested on a physical iPhone with bundle id
 `com.karthikshashidhar.pensieve`. Current TestFlight/device build is version
-`0.1`, build `3`.
+`0.1`, build `5`.
 
 ## Quick Start For New Users
 
 1. Install Pensieve from TestFlight or a local device build.
 2. Open **Capture**.
-3. Paste your Anthropic API key into the **Start Here** section and tap
+3. Paste your selected LLM provider API key into the **Start Here** section and tap
    **Save API Key**. Pensieve stores the key in the iOS Keychain.
 4. Create a first note:
    - Tap **Record Voice Note**, speak, then tap **Stop Recording**.
@@ -33,29 +33,30 @@ Built and tested on a physical iPhone with bundle id
    - **Export Pensieve Backup** and **Restore Pensieve Backup** move the local
      store in and out as JSON.
 
-### What Requires Anthropic
+### What Requires An LLM Provider
 
-Pensieve needs an Anthropic API key for note processing, URL processing, chat,
-digests, corpus analysis, topic cleanup, note linking, and contradiction
-analysis. Voice audio is recorded locally and transcribed on device with
-WhisperKit, but the resulting transcript is still sent to Anthropic when
-Pensieve turns it into a structured note.
+Pensieve needs a configured LLM provider API key for note processing, URL
+processing, chat, digests, corpus analysis, topic cleanup, note linking, and
+contradiction analysis. Existing installs keep using Anthropic by default. New
+installs can use Anthropic or OpenAI for LLM processing. Voice audio is recorded
+locally and transcribed on device with WhisperKit by default, with optional
+OpenAI or Sarvam transcription in Settings.
 
 ### What Is Local
 
-The app stores its local JSON database in Application Support and keeps the
-Anthropic key in Keychain. Audio transcription runs on device. Backup export
-and restore use the iOS Files picker.
+The app stores its local JSON database in Application Support and keeps API keys
+in Keychain. Audio transcription runs on device unless a cloud transcription
+provider is selected. Backup export and restore use the iOS Files picker.
 
 Implemented:
 
 - Voice capture with local audio recording that is resilient to screen lock.
 - On-device transcription via WhisperKit.
 - Text capture.
-- URL capture with Anthropic processing.
+- URL capture with selected LLM-provider processing.
 - Persistent local store in Application Support:
   `Pensieve/local-store.json`.
-- Anthropic API key storage in Keychain.
+- Anthropic, OpenAI, and Sarvam API key storage in Keychain.
 - Capture processing into structured notes.
 - Retrieval-backed chat over saved notes.
 - Notes tab.

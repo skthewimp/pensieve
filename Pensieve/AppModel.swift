@@ -12,23 +12,43 @@ final class AppModel: ObservableObject {
     @Published var chatMessages: [ChatMessage] = []
     @Published var lastTopicCleanupDiagnostics: TopicCleanupDiagnostics?
     @Published var isAnthropicConfigured: Bool
+    @Published var isOpenAIConfigured: Bool
+    @Published var isSarvamConfigured: Bool
+    @Published var selectedLLMProvider: LLMProviderKind
+    @Published var selectedTranscriptionProvider: TranscriptionProviderKind
 
     let audioRecorder = AudioRecorderService()
-    let transcriptionService = TranscriptionService()
+    let transcriptionService: TranscriptionService
     let captureService: CaptureService
     let localStore: LocalStore
     private let keychain: KeychainService
-    private let llmProvider: LLMProvider
+    private let llmProvider: LLMProviderRouter
     private let importService: SecondBrainImportService
     private var cancellables = Set<AnyCancellable>()
+
+    var isSelectedLLMConfigured: Bool {
+        switch selectedLLMProvider {
+        case .anthropic:
+            return isAnthropicConfigured
+        case .openAI:
+            return isOpenAIConfigured
+        }
+    }
 
     init() {
         let store = FileLocalStore()
         let keychain = KeychainService()
+        let transcriptionService = TranscriptionService(keychain: keychain)
+        let llmProvider = LLMProviderRouter(keychain: keychain)
         self.localStore = store
         self.keychain = keychain
         self.isAnthropicConfigured = keychain.hasAnthropicAPIKey()
-        self.llmProvider = AnthropicProvider(keychain: keychain)
+        self.isOpenAIConfigured = keychain.hasOpenAIAPIKey()
+        self.isSarvamConfigured = keychain.hasSarvamAPIKey()
+        self.selectedLLMProvider = llmProvider.selectedKind
+        self.selectedTranscriptionProvider = transcriptionService.selectedProvider
+        self.transcriptionService = transcriptionService
+        self.llmProvider = llmProvider
         self.importService = SecondBrainImportService(store: store)
         self.captureService = CaptureService(
             store: store,
@@ -66,6 +86,41 @@ final class AppModel: ObservableObject {
     func saveAnthropicAPIKey(_ apiKey: String) throws {
         try keychain.saveAnthropicAPIKey(apiKey)
         isAnthropicConfigured = keychain.hasAnthropicAPIKey()
+    }
+
+    func deleteAnthropicAPIKey() throws {
+        try keychain.deleteAnthropicAPIKey()
+        isAnthropicConfigured = keychain.hasAnthropicAPIKey()
+    }
+
+    func saveOpenAIAPIKey(_ apiKey: String) throws {
+        try keychain.saveOpenAIAPIKey(apiKey)
+        isOpenAIConfigured = keychain.hasOpenAIAPIKey()
+    }
+
+    func deleteOpenAIAPIKey() throws {
+        try keychain.deleteOpenAIAPIKey()
+        isOpenAIConfigured = keychain.hasOpenAIAPIKey()
+    }
+
+    func saveSarvamAPIKey(_ apiKey: String) throws {
+        try keychain.saveSarvamAPIKey(apiKey)
+        isSarvamConfigured = keychain.hasSarvamAPIKey()
+    }
+
+    func deleteSarvamAPIKey() throws {
+        try keychain.deleteSarvamAPIKey()
+        isSarvamConfigured = keychain.hasSarvamAPIKey()
+    }
+
+    func setLLMProvider(_ provider: LLMProviderKind) {
+        llmProvider.selectedKind = provider
+        selectedLLMProvider = provider
+    }
+
+    func setTranscriptionProvider(_ provider: TranscriptionProviderKind) {
+        transcriptionService.selectedProvider = provider
+        selectedTranscriptionProvider = provider
     }
 
     func sendChatMessage(_ content: String) async throws {
@@ -383,7 +438,7 @@ final class AppModel: ObservableObject {
     }
 
     private func runPeriodicBacklinkMaintenanceIfNeeded() async {
-        guard isAnthropicConfigured, notes.count >= 2, Self.isBacklinkMaintenanceDue else { return }
+        guard isSelectedLLMConfigured, notes.count >= 2, Self.isBacklinkMaintenanceDue else { return }
         _ = try? await connectNotesRetrospectively()
     }
 

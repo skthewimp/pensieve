@@ -15,13 +15,63 @@ enum KeychainError: LocalizedError {
 final class KeychainService {
     private let service = "com.karthikshashidhar.pensieve"
     private let anthropicAccount = "anthropic-api-key"
+    private let openAIAccount = "openai-api-key"
+    private let sarvamAccount = "sarvam-api-key"
 
     func saveAnthropicAPIKey(_ apiKey: String) throws {
+        try saveAPIKey(apiKey, account: anthropicAccount)
+    }
+
+    func loadAnthropicAPIKey() -> String? {
+        loadAPIKey(account: anthropicAccount)
+    }
+
+    func hasAnthropicAPIKey() -> Bool {
+        hasAPIKey(account: anthropicAccount)
+    }
+
+    func deleteAnthropicAPIKey() throws {
+        try deleteAPIKey(account: anthropicAccount)
+    }
+
+    func saveOpenAIAPIKey(_ apiKey: String) throws {
+        try saveAPIKey(apiKey, account: openAIAccount)
+    }
+
+    func loadOpenAIAPIKey() -> String? {
+        loadAPIKey(account: openAIAccount)
+    }
+
+    func hasOpenAIAPIKey() -> Bool {
+        hasAPIKey(account: openAIAccount)
+    }
+
+    func deleteOpenAIAPIKey() throws {
+        try deleteAPIKey(account: openAIAccount)
+    }
+
+    func saveSarvamAPIKey(_ apiKey: String) throws {
+        try saveAPIKey(apiKey, account: sarvamAccount)
+    }
+
+    func loadSarvamAPIKey() -> String? {
+        loadAPIKey(account: sarvamAccount)
+    }
+
+    func hasSarvamAPIKey() -> Bool {
+        hasAPIKey(account: sarvamAccount)
+    }
+
+    func deleteSarvamAPIKey() throws {
+        try deleteAPIKey(account: sarvamAccount)
+    }
+
+    private func saveAPIKey(_ apiKey: String, account: String) throws {
         let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let query = baseQuery(account: anthropicAccount)
+        let query = baseQuery(account: account)
 
         if trimmed.isEmpty {
-            SecItemDelete(query as CFDictionary)
+            try deleteAPIKey(account: account)
             return
         }
 
@@ -47,8 +97,8 @@ final class KeychainService {
         }
     }
 
-    func loadAnthropicAPIKey() -> String? {
-        var query = baseQuery(account: anthropicAccount)
+    private func loadAPIKey(account: String) -> String? {
+        var query = baseQuery(account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -62,9 +112,16 @@ final class KeychainService {
         return String(data: data, encoding: .utf8)
     }
 
-    func hasAnthropicAPIKey() -> Bool {
-        guard let key = loadAnthropicAPIKey() else { return false }
+    private func hasAPIKey(account: String) -> Bool {
+        guard let key = loadAPIKey(account: account) else { return false }
         return !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func deleteAPIKey(account: String) throws {
+        let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError.unexpectedStatus(status)
+        }
     }
 
     private func baseQuery(account: String) -> [String: Any] {
