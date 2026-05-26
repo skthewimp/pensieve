@@ -259,7 +259,7 @@ Current release identifiers:
 - Bundle id: `com.karthikshashidhar.pensieve`
 - Apple team id: `DQ23J9RMB2`
 - Version: `0.1`
-- Build: `3`
+- Build: `5`
 
 The App Store icon asset is present at:
 
@@ -316,7 +316,26 @@ Retry the TestFlight upload with:
 xcodebuild -exportArchive -archivePath build/Pensieve.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/AppStoreUpload -allowProvisioningUpdates
 ```
 
-Current blocker:
+After Xcode reports `Uploaded package is processing`, App Store Connect still
+needs one release step before external testers receive the build:
+
+1. Open App Store Connect -> Pensieve -> TestFlight -> iOS Builds.
+2. Wait for the new build to finish processing.
+3. If the build shows `Missing Compliance`, click `Manage` and answer the export
+   compliance questions.
+4. Select the build for the external tester group, fill in any beta review notes,
+   and submit it.
+5. Do not count the release as done until the build status is `Testing` for the
+   intended tester group.
+
+Pensieve declares `ITSAppUsesNonExemptEncryption=false` in `Info.plist`. Keep
+that accurate: the app currently uses Apple's platform networking/security APIs
+for HTTPS and Keychain storage, and does not implement custom non-exempt
+encryption in first-party code. If future work adds custom cryptography, VPN,
+secure messaging, encrypted file storage, or other non-exempt encryption, revisit
+this before uploading.
+
+Old upload blocker:
 
 ```text
 No provider associated with App Store Connect user

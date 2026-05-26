@@ -76,6 +76,16 @@ xcodebuild -exportArchive -archivePath build/Pensieve.xcarchive -exportOptionsPl
 
 Xcode reported: `Uploaded package is processing.`
 
+### Follow-up
+
+- App Store Connect showed build `5` as `Ready to Submit`, which means upload
+  succeeded but the build still needs to be submitted/assigned for TestFlight.
+- Added `ITSAppUsesNonExemptEncryption=false` to `Info.plist` so future builds
+  should not repeatedly stop at `Missing Compliance` as long as the app does not
+  add custom non-exempt encryption.
+- Updated the README TestFlight checklist to make the post-upload App Store
+  Connect submission step explicit.
+
 ## 2026-05-25 20:21 IST - tester-recording-permission-fix
 
 ### User prompts
