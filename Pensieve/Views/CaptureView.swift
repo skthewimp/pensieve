@@ -8,14 +8,28 @@ struct CaptureView: View {
     @State private var setupAPIKey = ""
     @State private var setupMessage: String?
     @State private var isSubmitting = false
+    @State private var isTranscribingURLNote = false
+    @State private var recordingPurpose: RecordingPurpose?
     @State private var errorMessage: String?
     @FocusState private var focusedField: CaptureField?
+
+    private enum RecordingPurpose {
+        case voiceNote
+        case urlNote
+    }
 
     private enum CaptureField {
         case setupAPIKey
         case text
         case url
         case urlNote
+    }
+
+    private var canSubmitURL: Bool {
+        !urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isSubmitting
+            && !isTranscribingURLNote
+            && !appModel.audioRecorder.isRecording
     }
 
     var body: some View {
@@ -52,17 +66,17 @@ struct CaptureView: View {
 
                 Section("Voice") {
                     Button {
-                        Task { await toggleRecording() }
+                        Task { await toggleVoiceNoteRecording() }
                     } label: {
                         Label(
-                            appModel.audioRecorder.isRecording ? "Stop Recording" : "Record Voice Note",
-                            systemImage: appModel.audioRecorder.isRecording ? "stop.circle.fill" : "mic.fill"
+                            recordingPurpose == .voiceNote ? "Stop Recording" : "Record Voice Note",
+                            systemImage: recordingPurpose == .voiceNote ? "stop.circle.fill" : "mic.fill"
                         )
                     }
-                    .foregroundStyle(appModel.audioRecorder.isRecording ? .red : .primary)
-                    .disabled(isSubmitting)
+                    .foregroundStyle(recordingPurpose == .voiceNote ? .red : .primary)
+                    .disabled(isSubmitting || isTranscribingURLNote || (appModel.audioRecorder.isRecording && recordingPurpose != .voiceNote))
 
-                    if appModel.audioRecorder.isRecording {
+                    if recordingPurpose == .voiceNote {
                         Text(formatDuration(appModel.audioRecorder.recordingDuration))
                             .font(.system(.title2, design: .monospaced))
                             .foregroundStyle(.red)
@@ -91,7 +105,7 @@ struct CaptureView: View {
                 }
 
                 Section("URL") {
-                    TextField("https://example.com", text: $urlText)
+                    TextField(focusedField == .url ? "" : "https://example.com", text: $urlText)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
                         .focused($focusedField, equals: .url)
@@ -100,11 +114,30 @@ struct CaptureView: View {
                         .focused($focusedField, equals: .urlNote)
 
                     Button {
+                        Task { await toggleURLNoteRecording() }
+                    } label: {
+                        Label(
+                            recordingPurpose == .urlNote ? "Stop Dictating Note" : "Dictate URL Note",
+                            systemImage: recordingPurpose == .urlNote ? "stop.circle.fill" : "mic"
+                        )
+                    }
+                    .foregroundStyle(recordingPurpose == .urlNote ? .red : .primary)
+                    .disabled(isSubmitting || isTranscribingURLNote || (appModel.audioRecorder.isRecording && recordingPurpose != .urlNote))
+
+                    if recordingPurpose == .urlNote {
+                        Text(formatDuration(appModel.audioRecorder.recordingDuration))
+                            .font(.system(.headline, design: .monospaced))
+                            .foregroundStyle(.red)
+                    } else if isTranscribingURLNote {
+                        ProgressView("Transcribing note...")
+                    }
+
+                    Button {
                         Task { await submitURL() }
                     } label: {
                         Label("Save URL", systemImage: "link")
                     }
-                    .disabled(urlText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting)
+                    .disabled(!canSubmitURL)
                 }
 
                 if let errorMessage {
@@ -117,7 +150,15 @@ struct CaptureView: View {
             .scrollDismissesKeyboard(.interactively)
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
+                    if focusedField == .url || focusedField == .urlNote {
+                        Button("Save URL") {
+                            Task { await submitURL() }
+                        }
+                        .disabled(!canSubmitURL)
+                    }
+
                     Spacer()
+
                     Button("Done") {
                         focusedField = nil
                     }
@@ -169,13 +210,14 @@ struct CaptureView: View {
         }
     }
 
-    private func toggleRecording() async {
+    private func toggleVoiceNoteRecording() async {
         errorMessage = nil
 
-        if appModel.audioRecorder.isRecording {
+        if recordingPurpose == .voiceNote, appModel.audioRecorder.isRecording {
             guard let recording = await MainActor.run(body: {
                 appModel.audioRecorder.stopRecording()
             }) else { return }
+            recordingPurpose = nil
 
             isSubmitting = true
             defer { isSubmitting = false }
@@ -189,9 +231,38 @@ struct CaptureView: View {
             return
         }
 
+        await startRecording(for: .voiceNote)
+    }
+
+    private func toggleURLNoteRecording() async {
+        errorMessage = nil
+
+        if recordingPurpose == .urlNote, appModel.audioRecorder.isRecording {
+            guard let recording = await MainActor.run(body: {
+                appModel.audioRecorder.stopRecording()
+            }) else { return }
+            recordingPurpose = nil
+
+            isTranscribingURLNote = true
+            defer { isTranscribingURLNote = false }
+            do {
+                let transcript = try await appModel.transcriptionService.transcribe(audioURL: recording.url)
+                appendURLNote(transcript)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            return
+        }
+
+        await startRecording(for: .urlNote)
+    }
+
+    private func startRecording(for purpose: RecordingPurpose) async {
+        guard !appModel.audioRecorder.isRecording else { return }
+
         let granted = await appModel.audioRecorder.requestPermission()
         guard granted else {
-            errorMessage = "Microphone access is required to record voice notes."
+            errorMessage = "Microphone access is required to record audio."
             return
         }
 
@@ -200,7 +271,17 @@ struct CaptureView: View {
         }
         if recordingURL == nil {
             errorMessage = "Could not start recording. Check microphone access in Settings."
+        } else {
+            recordingPurpose = purpose
         }
+    }
+
+    private func appendURLNote(_ transcript: String) {
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let existing = urlNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        urlNote = existing.isEmpty ? trimmed : "\(existing)\n\n\(trimmed)"
+        focusedField = .urlNote
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {

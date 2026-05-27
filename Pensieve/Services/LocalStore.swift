@@ -1,7 +1,7 @@
 import Foundation
 
 struct LocalStoreSnapshot: Codable {
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 4
 
     var schemaVersion: Int
     var captures: [Capture]
@@ -10,6 +10,7 @@ struct LocalStoreSnapshot: Codable {
     var insights: [Insight]
     var wikiTopics: [WikiTopic]
     var noteConnections: [NoteConnection]
+    var chatSessions: [ChatSession]
     var chatMessages: [ChatMessage]
 
     init(
@@ -20,6 +21,7 @@ struct LocalStoreSnapshot: Codable {
         insights: [Insight] = [],
         wikiTopics: [WikiTopic] = [],
         noteConnections: [NoteConnection] = [],
+        chatSessions: [ChatSession] = [],
         chatMessages: [ChatMessage] = []
     ) {
         self.schemaVersion = schemaVersion
@@ -29,11 +31,12 @@ struct LocalStoreSnapshot: Codable {
         self.insights = insights
         self.wikiTopics = wikiTopics
         self.noteConnections = noteConnections
+        self.chatSessions = chatSessions
         self.chatMessages = chatMessages
     }
 
     enum CodingKeys: String, CodingKey {
-        case schemaVersion, captures, notes, contradictions, insights, wikiTopics, noteConnections, chatMessages
+        case schemaVersion, captures, notes, contradictions, insights, wikiTopics, noteConnections, chatSessions, chatMessages
     }
 
     init(from decoder: Decoder) throws {
@@ -46,6 +49,32 @@ struct LocalStoreSnapshot: Codable {
         wikiTopics = try container.decodeIfPresent([WikiTopic].self, forKey: .wikiTopics) ?? []
         noteConnections = try container.decodeIfPresent([NoteConnection].self, forKey: .noteConnections) ?? []
         chatMessages = try container.decodeIfPresent([ChatMessage].self, forKey: .chatMessages) ?? []
+        let decodedSessions = try container.decodeIfPresent([ChatSession].self, forKey: .chatSessions) ?? []
+        chatSessions = decodedSessions.isEmpty ? Self.sessions(from: chatMessages) : decodedSessions
+    }
+
+    private static func sessions(from messages: [ChatMessage]) -> [ChatSession] {
+        Dictionary(grouping: messages, by: \.sessionID)
+            .map { sessionID, messages in
+                let sorted = messages.sorted { $0.createdAt < $1.createdAt }
+                let firstUserMessage = sorted.first { $0.role == .user }
+                let firstDate = sorted.first?.createdAt ?? Date()
+                let lastDate = sorted.last?.createdAt ?? firstDate
+                return ChatSession(
+                    id: sessionID,
+                    title: title(for: firstUserMessage?.content),
+                    createdAt: firstDate,
+                    updatedAt: lastDate
+                )
+            }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private static func title(for content: String?) -> String {
+        guard let content else { return "Previous chat" }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Previous chat" }
+        return String(trimmed.prefix(48))
     }
 }
 
@@ -58,6 +87,7 @@ protocol LocalStore {
     func saveWikiTopic(_ topic: WikiTopic) async
     func saveNoteConnection(_ connection: NoteConnection) async
     func deleteWikiTopics() async
+    func saveChatSession(_ session: ChatSession) async
     func saveChatMessage(_ message: ChatMessage) async
     func exportBackupData() async throws -> Data
     func restoreBackupData(_ data: Data) async throws
@@ -67,6 +97,7 @@ protocol LocalStore {
     func loadInsights() async -> [Insight]
     func loadWikiTopics() async -> [WikiTopic]
     func loadNoteConnections() async -> [NoteConnection]
+    func loadChatSessions() async -> [ChatSession]
     func loadChatMessages() async -> [ChatMessage]
 }
 
@@ -163,6 +194,12 @@ actor FileLocalStore: LocalStore {
         persist()
     }
 
+    func saveChatSession(_ session: ChatSession) {
+        upsert(session, into: &snapshot.chatSessions)
+        snapshot.chatSessions.sort { $0.updatedAt > $1.updatedAt }
+        persist()
+    }
+
     func saveChatMessage(_ message: ChatMessage) {
         snapshot.chatMessages.append(message)
         persist()
@@ -183,6 +220,7 @@ actor FileLocalStore: LocalStore {
         restored.insights.sort { $0.createdAt > $1.createdAt }
         restored.wikiTopics.sort { $0.sourceNoteIDs.count > $1.sourceNoteIDs.count }
         restored.noteConnections.sort { $0.createdAt > $1.createdAt }
+        restored.chatSessions.sort { $0.updatedAt > $1.updatedAt }
         snapshot = restored
         persist()
     }
@@ -209,6 +247,10 @@ actor FileLocalStore: LocalStore {
 
     func loadNoteConnections() -> [NoteConnection] {
         snapshot.noteConnections
+    }
+
+    func loadChatSessions() -> [ChatSession] {
+        snapshot.chatSessions
     }
 
     func loadChatMessages() -> [ChatMessage] {
@@ -250,6 +292,7 @@ actor InMemoryLocalStore: LocalStore {
     private var insights: [Insight] = []
     private var wikiTopics: [WikiTopic] = []
     private var noteConnections: [NoteConnection] = []
+    private var chatSessions: [ChatSession] = []
     private var chatMessages: [ChatMessage] = []
 
     func saveCapture(_ capture: Capture) {
@@ -303,6 +346,11 @@ actor InMemoryLocalStore: LocalStore {
         wikiTopics = []
     }
 
+    func saveChatSession(_ session: ChatSession) {
+        upsert(session, into: &chatSessions)
+        chatSessions.sort { $0.updatedAt > $1.updatedAt }
+    }
+
     func saveChatMessage(_ message: ChatMessage) {
         chatMessages.append(message)
     }
@@ -319,6 +367,7 @@ actor InMemoryLocalStore: LocalStore {
                 insights: insights,
                 wikiTopics: wikiTopics,
                 noteConnections: noteConnections,
+                chatSessions: chatSessions,
                 chatMessages: chatMessages
             )
         )
@@ -334,6 +383,7 @@ actor InMemoryLocalStore: LocalStore {
         insights = restored.insights.sorted { $0.createdAt > $1.createdAt }
         wikiTopics = restored.wikiTopics.sorted { $0.sourceNoteIDs.count > $1.sourceNoteIDs.count }
         noteConnections = restored.noteConnections.sorted { $0.createdAt > $1.createdAt }
+        chatSessions = restored.chatSessions.sorted { $0.updatedAt > $1.updatedAt }
         chatMessages = restored.chatMessages
     }
 
@@ -359,6 +409,10 @@ actor InMemoryLocalStore: LocalStore {
 
     func loadNoteConnections() -> [NoteConnection] {
         noteConnections
+    }
+
+    func loadChatSessions() -> [ChatSession] {
+        chatSessions
     }
 
     func loadChatMessages() -> [ChatMessage] {

@@ -1,5 +1,40 @@
 # Pensieve Dev Log
 
+## 2026-05-27 10:15 IST - chat-navigation-capture-ux
+
+### User prompts
+
+> I need a new feature to be able to chat with my notes. The chat page is a little dated because my old chats don't seem to go away.
+
+> The other thing is that I want a feature where I can chat with my notes, get some output which I can then put into an LLM for other purposes [...]
+
+> thing is way too many things are stuck under "more". is this because the app is now too complicated? how do we redesign it so that new users don't miss stuff etc.?
+
+> when i paste URL i should be able to speak in the associated text and not have to just type
+
+### Work done
+
+- Reworked Chat into session-based history with a fresh composer by default; existing flat chat messages migrate into a legacy session and old chats are not sent as new-chat LLM context.
+- Added per-answer copy/share export as Markdown with question, answer, timestamp, and cited note excerpts for pasting into other LLMs.
+- Collapsed the iOS tab bar from nine destinations to five: Capture, Memory, Chat, Review, Settings. Memory now groups Notes/Topics/Map, and Review groups Queue/Insights/Tensions.
+- Added URL-note dictation in Capture using the existing recorder/transcription pipeline, plus a keyboard-toolbar `Save URL` action so URL saves are reachable while the keyboard is open.
+- Updated README navigation and backup documentation for chat sessions, answer export, and the new five-tab app structure.
+
+### Verification
+
+Generic iOS Debug builds succeeded with:
+
+```text
+xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -destination generic/platform=iOS -allowProvisioningUpdates build
+```
+
+Physical iPhone installs and launches succeeded on `Karthik's iPhone` (`F48DFE9A-5C82-51A8-BA9F-24F5204D127F`) with:
+
+```text
+xcrun devicectl device install app --device F48DFE9A-5C82-51A8-BA9F-24F5204D127F /Users/Karthik/Library/Developer/Xcode/DerivedData/Pensieve-exjgoqfjmokqludlhbdjgmaokfcc/Build/Products/Debug-iphoneos/Pensieve.app
+xcrun devicectl device process launch --device F48DFE9A-5C82-51A8-BA9F-24F5204D127F com.karthikshashidhar.pensieve
+```
+
 ## 2026-05-26 19:00 IST - multi-provider-testflight-plan-implementation
 
 ### User prompts

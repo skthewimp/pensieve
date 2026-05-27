@@ -9,7 +9,9 @@ final class AppModel: ObservableObject {
     @Published var insights: [Insight] = []
     @Published var wikiTopics: [WikiTopic] = []
     @Published var noteConnections: [NoteConnection] = []
+    @Published var chatSessions: [ChatSession] = []
     @Published var chatMessages: [ChatMessage] = []
+    @Published var activeChatSessionID: UUID?
     @Published var lastTopicCleanupDiagnostics: TopicCleanupDiagnostics?
     @Published var isAnthropicConfigured: Bool
     @Published var isOpenAIConfigured: Bool
@@ -80,6 +82,7 @@ final class AppModel: ObservableObject {
         insights = await localStore.loadInsights()
         wikiTopics = await localStore.loadWikiTopics()
         noteConnections = await localStore.loadNoteConnections()
+        chatSessions = await localStore.loadChatSessions()
         chatMessages = await localStore.loadChatMessages()
     }
 
@@ -123,11 +126,41 @@ final class AppModel: ObservableObject {
         selectedTranscriptionProvider = provider
     }
 
+    var activeChatMessages: [ChatMessage] {
+        guard let activeChatSessionID else { return [] }
+        return chatMessages
+            .filter { $0.sessionID == activeChatSessionID }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
+    var visibleChatHistory: [ChatSession] {
+        chatSessions
+            .filter { $0.id != activeChatSessionID }
+            .sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    var activeChatSession: ChatSession? {
+        guard let activeChatSessionID else { return nil }
+        return chatSessions.first { $0.id == activeChatSessionID }
+    }
+
+    func startNewChat() {
+        activeChatSessionID = nil
+    }
+
+    func openChatSession(_ session: ChatSession) {
+        activeChatSessionID = session.id
+    }
+
     func sendChatMessage(_ content: String) async throws {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let userMessage = ChatMessage(role: .user, content: trimmed)
+        let session = activeChatSession ?? ChatSession(title: Self.chatSessionTitle(from: trimmed))
+        activeChatSessionID = session.id
+        await localStore.saveChatSession(session)
+
+        let userMessage = ChatMessage(sessionID: session.id, role: .user, content: trimmed)
         await localStore.saveChatMessage(userMessage)
         await refresh()
 
@@ -136,12 +169,34 @@ final class AppModel: ObservableObject {
             ChatRequest(question: trimmed, contextNotes: context)
         )
         let assistantMessage = ChatMessage(
+            sessionID: session.id,
             role: .assistant,
             content: response.answer,
             contextNoteIDs: response.contextNoteIDs
         )
         await localStore.saveChatMessage(assistantMessage)
+        var updatedSession = session
+        updatedSession.updatedAt = assistantMessage.createdAt
+        await localStore.saveChatSession(updatedSession)
         await refresh()
+    }
+
+    func exportMarkdown(for message: ChatMessage) -> String {
+        let sessionMessages = chatMessages
+            .filter { $0.sessionID == message.sessionID }
+            .sorted { $0.createdAt < $1.createdAt }
+        let question = sessionMessages
+            .last { $0.role == .user && $0.createdAt <= message.createdAt }?
+            .content ?? "No question found."
+        let notesByID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
+        let sourceNotes = message.contextNoteIDs.compactMap { notesByID[$0] }
+
+        return Self.chatExportMarkdown(
+            question: question,
+            answer: message.content,
+            generatedAt: message.createdAt,
+            sourceNotes: sourceNotes
+        )
     }
 
     func importSecondBrainRawFolder(_ folderURL: URL) async throws -> SecondBrainImportResult {
@@ -364,6 +419,60 @@ final class AppModel: ObservableObject {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HHmm"
         return "pensieve-backup-\(formatter.string(from: Date()))"
+    }
+
+    private static func chatSessionTitle(from content: String) -> String {
+        let words = content
+            .split { $0.isWhitespace || $0.isNewline }
+            .prefix(8)
+            .joined(separator: " ")
+        return words.isEmpty ? "New chat" : words
+    }
+
+    private static func chatExportMarkdown(
+        question: String,
+        answer: String,
+        generatedAt: Date,
+        sourceNotes: [MemoryNote]
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+
+        let sources: String
+        if sourceNotes.isEmpty {
+            sources = "None cited."
+        } else {
+            sources = sourceNotes.map { note in
+                """
+                ## Source: \(note.title)
+                Date: \(formatter.string(from: note.createdAt))
+                Themes: \(note.themes.isEmpty ? "none" : note.themes.joined(separator: ", "))
+
+                Summary:
+                \(note.summary.isEmpty ? "No summary." : note.summary)
+
+                Excerpt:
+                \(note.body.prefix(1200))
+                """
+            }
+            .joined(separator: "\n\n")
+        }
+
+        return """
+        # Pensieve Chat Export
+
+        Generated: \(formatter.string(from: generatedAt))
+
+        ## Question
+        \(question)
+
+        ## Answer
+        \(answer)
+
+        ## Sources
+        \(sources)
+        """
     }
 
     private static func contradictionFingerprint(_ contradiction: Contradiction) -> String {
