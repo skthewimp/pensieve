@@ -16,6 +16,8 @@
 
 - `git diff --check` passed.
 - Generic iOS Debug build passed with `xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -destination generic/platform=iOS -allowProvisioningUpdates build`.
+- Release archive passed with `xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Release -destination generic/platform=iOS -archivePath build/Pensieve.xcarchive -allowProvisioningUpdates archive`.
+- App Store Connect upload passed with `xcodebuild -exportArchive -archivePath build/Pensieve.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/AppStoreUpload -allowProvisioningUpdates`; Xcode reported `Uploaded package is processing` and `Upload succeeded` for build `0.1 (6)`.
 
 ## 2026-05-27 10:15 IST - chat-navigation-capture-ux
 
