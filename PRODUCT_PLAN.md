@@ -50,16 +50,20 @@ Already implemented:
 - Voice capture.
 - On-device transcription with WhisperKit.
 - Text capture.
-- URL capture with Anthropic web fetch.
+- URL capture with selected LLM-provider processing.
+- URL note dictation through the existing recorder/transcription pipeline.
 - App-local JSON store in Application Support.
-- Anthropic API key in Keychain.
+- Anthropic, OpenAI, and Sarvam API keys in Keychain.
 - Capture processing into `MemoryNote`.
-- Notes, Wiki, Insights, Chat, Mindmap, Contradictions, Settings.
+- Five-tab navigation: Capture, Memory, Chat, Review, Settings.
+- Memory sections for Notes, Topics, and Map.
+- Review sections for Queue, Insights, and Tensions.
 - Retrieval-backed chat over saved notes.
+- Session-based chat history and Markdown answer export.
 - Manual contradiction analysis.
 - Contradiction detail and status.
 - One-time SecondBrain raw markdown import.
-- JSON backup export.
+- JSON backup export and restore.
 
 Current data model:
 
@@ -68,7 +72,7 @@ Current data model:
 - `Contradiction`: topic, before/after notes, explanation, status, confidence.
 - `Insight`: generated source-backed finding with review status.
 - `WikiTopic`: generated source-backed topic page with canonical theme, aliases, sources, subthemes, questions, and related themes.
-- `ChatMessage`: chat history and note context.
+- `ChatSession` and `ChatMessage`: chat history and note context.
 
 Current architectural constraint:
 
@@ -419,7 +423,7 @@ Features:
 - Add `Insight` model and store support. Done.
 - Add manual `Analyze Corpus`. Done.
 - Generate high-signal insights from corpus. Done.
-- Show insights in Insights tab. Done.
+- Show insights in Review Insights section. Done.
 - Open source notes from each insight. Done.
 - Review status: pending, accepted, dismissed, important, superseded. Done.
 

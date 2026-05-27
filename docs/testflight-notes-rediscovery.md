@@ -1,48 +1,47 @@
-# TestFlight Notes: Rediscovery Review
+# TestFlight Notes: Chat, Navigation, And Capture UX
 
 ## What Changed
 
-This build focuses on making Pensieve better at helping you revisit old notes.
+This build focuses on making Pensieve easier to use as a daily memory app.
 
-- Weekly Digest: generates a source-backed review of the latest week of notes.
-- Retrospective Connections: finds backlinks and multi-note threads across time.
-- Rediscovered Notes: surfaces older notes that connect to recent themes.
-- Related Notes and Backlinks: note detail screens now show nearby notes and LLM-generated connections.
-- Topic Cleanup: consolidates noisy raw themes into a smaller set of canonical topics.
+- Navigation is now five tabs: Capture, Memory, Chat, Review, Settings.
+- Memory groups Notes, Topics, and Map so users do not miss browse surfaces.
+- Review groups Queue, Insights, and Tensions so generated memory has one place to inspect.
+- Chat now starts fresh by default and keeps old sessions in history.
+- Chat answers can be copied or shared as Markdown with cited note context for use in another LLM.
+- URL capture now supports dictated associated notes.
+- URL capture can be saved from the keyboard toolbar while the keyboard is open.
 
 There are no social features in this build.
 
 ## What To Try
 
-1. Add or import a meaningful set of notes.
-2. Open Settings.
-3. Confirm the Anthropic API key is configured.
-4. Run Clean Up Topics.
-5. Review the preview and apply it if the topics look sensible.
-6. Run Generate Weekly Digest.
-7. Run Connect Notes Retrospectively.
-8. Open Insights and review:
-   - Weekly Digests
-   - Rediscovered Notes
-   - Retrospective Connections
-9. Open a note detail page and check Related Notes and Backlinks.
-10. Quit and reopen the app to confirm generated items persist.
+1. Open Capture and save a text note.
+2. Paste a URL, tap `Dictate URL Note`, speak a note, stop dictation, then save the URL.
+3. Confirm the URL placeholder disappears when the URL field is focused.
+4. Confirm `Save URL` is available above the keyboard while editing the URL or note field.
+5. Open Memory and switch between Notes, Topics, and Map.
+6. Open Chat, ask a question, then start a new chat and confirm the old session stays in History.
+7. Tap Copy and Share on a chat answer; neither action should open a source note.
+8. Open Review and switch between Queue, Insights, and Tensions.
+9. Quit and reopen the app to confirm chat sessions and generated items persist.
 
 ## Useful Feedback
 
-Focus feedback on whether the output is genuinely useful:
+Focus feedback on whether the app feels understandable and lower-friction:
 
-- Are the canonical topics too broad, too narrow, or mislabeled?
-- Does the weekly digest feel grounded in actual notes?
-- Are rediscovered notes worth revisiting?
-- Do backlinks connect notes in a surprising but defensible way?
-- Are any generated explanations generic, repetitive, or unsupported?
-- Did anything disappear after relaunch?
-- Did any screen feel cluttered or confusing?
+- Is the five-tab navigation clearer than the old `More` overflow?
+- Are Memory and Review section names obvious?
+- Does fresh Chat avoid old-session clutter?
+- Is chat answer export useful for pasting into another LLM?
+- Does URL note dictation feel natural?
+- Is `Save URL` reachable at the right moment?
+- Did any screen feel cluttered, confusing, or hard to find?
 
 ## Known Limits
 
-- LLM features require an Anthropic API key.
+- LLM processing requires a user-supplied Anthropic or OpenAI key.
+- Cloud transcription requires the selected provider key; on-device Whisper remains the default.
 - Generated outputs depend on the quality and volume of available notes.
 - Topic cleanup is meant to create durable review topics, not preserve every raw tag.
-- Backlinks are intentionally selective; missing a weak connection is better than flooding the app.
+- Search/retrieval still uses simple local ranking rather than SQLite full-text search.

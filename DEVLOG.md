@@ -1,5 +1,22 @@
 # Pensieve Dev Log
 
+## 2026-05-27 10:25 IST - testflight-build-6-prep
+
+### User prompts
+
+> Okay, do all of this right now, and then we'll push to testfliught
+
+### Work done
+
+- Bumped `CFBundleVersion` to `6` for the next TestFlight upload.
+- Refreshed the README, product plan, and tester notes for selected LLM providers, five-tab navigation, chat sessions/export, URL-note dictation, and keyboard-safe URL saving.
+- Updated TestFlight notes with focused checks for Capture, Memory, Chat, and Review before the build is sent to testers.
+
+### Verification
+
+- `git diff --check` passed.
+- Generic iOS Debug build passed with `xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -destination generic/platform=iOS -allowProvisioningUpdates build`.
+
 ## 2026-05-27 10:15 IST - chat-navigation-capture-ux
 
 ### User prompts

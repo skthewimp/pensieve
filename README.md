@@ -2,14 +2,14 @@
 
 Pensieve is the shareable, iPhone-first version of the personal SecondBrain
 workflow. It is currently a local-first SwiftUI iOS app backed by an app-local
-JSON store, on-device voice transcription, and user-supplied Anthropic API
-calls for note processing, chat, and contradiction analysis.
+JSON store, on-device voice transcription, and user-supplied LLM provider API
+calls for note processing, chat, and corpus analysis.
 
 ## Current App Status
 
 Built and tested on a physical iPhone with bundle id
 `com.karthikshashidhar.pensieve`. Current TestFlight/device build is version
-`0.1`, build `5`.
+`0.1`, build `6`.
 
 ## Quick Start For New Users
 
@@ -21,7 +21,7 @@ Built and tested on a physical iPhone with bundle id
    - Tap **Record Voice Note**, speak, then tap **Stop Recording**.
    - Or paste text and tap **Save Text**.
    - Or paste a URL, add an optional note, and tap **Save URL**.
-5. Browse saved notes in **Notes** and **Wiki**.
+5. Browse saved notes in **Memory**.
 6. Use **Chat** to ask questions over saved notes.
 7. Use **Settings** for maintenance actions:
    - **Generate Weekly Digest** creates a summary insight.
@@ -62,9 +62,9 @@ Implemented:
 - Five-tab navigation: Capture, Memory, Chat, Review, Settings.
 - Memory tab with Notes, Topics, and Map sections.
 - Review tab with Queue, Insights, and Tensions sections.
-- Insights tab with local corpus summaries and generated source-backed insights.
-- Mindmap tab grouped by generated topics when available, with theme fallback.
-- Contradictions tab backed by saved contradiction records.
+- Review Insights section with local corpus summaries and generated source-backed insights.
+- Memory Map section grouped by generated topics when available, with theme fallback.
+- Review Tensions section backed by saved contradiction records.
 - Contradiction detail pages with linked source notes and review status.
 - Manual contradiction backfill from the note corpus.
 - One-time SecondBrain raw markdown import.
@@ -87,20 +87,20 @@ Not yet implemented:
 - Automatic contradiction scans after every capture/import.
 - Durable background processing.
 - True graph layout for the mindmap.
-- OpenAI provider.
 
 ## How The App Works Today
 
 ### Automatic / Live
 
-- **Notes** update when captures are processed or imported.
-- **Wiki** is a live view over saved notes. It does not call an LLM.
-- **Mindmap** is a live view over note themes. It does not call an LLM.
-  When generated Wiki topics exist, Mindmap uses those topic buckets instead
+- **Memory** updates when captures are processed or imported.
+- **Topics** inside Memory is a live view over saved notes. It does not call an LLM.
+- **Map** inside Memory is a live view over note themes. It does not call an LLM.
+  When generated Wiki topics exist, Map uses those topic buckets instead
   of raw themes.
-- **Insights** is a live local analysis view over saved notes and contradictions.
+- **Review** is a live local analysis and review workspace over saved notes,
+  insights, generated topics, and contradictions.
 - **Chat** retrieves locally saved notes, then sends the question and selected
-  context notes to Anthropic.
+  context notes to the selected LLM provider.
 
 ### Manual
 
@@ -255,7 +255,7 @@ Current release identifiers:
 - Bundle id: `com.karthikshashidhar.pensieve`
 - Apple team id: `DQ23J9RMB2`
 - Version: `0.1`
-- Build: `5`
+- Build: `6`
 
 The App Store icon asset is present at:
 
@@ -421,19 +421,23 @@ On device:
 
 Remote:
 
-- Anthropic API for note processing, contradiction detection, memory updates,
-  and chat answers
+- Selected LLM provider API for note processing, contradiction detection,
+  memory updates, and chat answers.
+- Optional cloud transcription provider API if OpenAI or Sarvam transcription
+  is selected in Settings.
 
 Important privacy copy for TestFlight and later App Store builds:
 
 - Audio stays on device.
-- Voice transcription happens on device.
+- Voice transcription happens on device unless a cloud transcription provider
+  is selected.
 - Notes are stored on device.
-- Text selected for processing is sent to Anthropic using the user's API key.
-- No shared developer-owned Anthropic API key should ship in the app.
+- Text selected for processing is sent to the selected LLM provider using the
+  user's API key.
+- No shared developer-owned LLM API key should ship in the app.
 
-For the first shareable version, use BYO Anthropic API key stored in Keychain.
-Later, the app can add OpenAI or a backend-owned LLM gateway if the product
+For the first shareable version, use BYO Anthropic/OpenAI API key stored in
+Keychain. A backend-owned LLM gateway can be reconsidered later if the product
 direction justifies it.
 
 ## Target Architecture
@@ -724,8 +728,8 @@ navigation, not a beautiful graph engine.
 
 Expected settings:
 
-- Anthropic API key
-- LLM provider selection, initially Anthropic only
+- LLM provider API keys
+- LLM provider selection
 - Privacy explanation
 - Export Pensieve backup
 - One-time SecondBrain import while migration is still needed
@@ -767,7 +771,7 @@ markdown files.
 - Create a new iOS app target/folder named `Pensieve`.
 - Bundle id: `com.karthikshashidhar.pensieve`.
 - Use the paid Apple Developer team.
-- Add tabs: Capture, Notes, Wiki, Chat, Contradictions, Mindmap, Settings.
+- Add tabs: Capture, Memory, Chat, Review, Settings.
 - Add basic app icon/display name/versioning.
 
 ### Phase 2: Local Capture
@@ -814,7 +818,7 @@ markdown files.
 - Extend capture processing or memory update prompts to identify
   contradictions.
 - Store source-backed contradictions locally.
-- Add Contradictions tab with review/dismiss states.
+- Add Review Tensions section with review/dismiss states.
 
 ### Phase 8: Mindmap
 
