@@ -38,6 +38,7 @@ struct NotesView: View {
                             }
                         }
                     }
+                    .onDelete(perform: deleteNotes)
                 }
             }
             .overlay {
@@ -48,14 +49,25 @@ struct NotesView: View {
             .navigationTitle("Notes")
         }
     }
+
+    private func deleteNotes(at offsets: IndexSet) {
+        let notesToDelete = offsets.map { appModel.notes[$0] }
+        Task {
+            for note in notesToDelete {
+                await appModel.deleteNote(note)
+            }
+        }
+    }
 }
 
 struct NoteDetailView: View {
     @EnvironmentObject private var appModel: AppModel
+    @Environment(\.dismiss) private var dismiss
     let note: MemoryNote
     @State private var audioPlayer: AVAudioPlayer?
     @State private var isPlayingAudio = false
     @State private var audioMessage: String?
+    @State private var isShowingDeleteConfirmation = false
 
     private var relatedNotes: [MemoryNote] {
         let noteThemes = Set(note.themes.map(normalizedTheme).filter { !$0.isEmpty })
@@ -186,6 +198,28 @@ struct NoteDetailView: View {
         .onDisappear {
             audioPlayer?.stop()
             isPlayingAudio = false
+        }
+        .toolbar {
+            Button(role: .destructive) {
+                isShowingDeleteConfirmation = true
+            } label: {
+                Label("Delete Note", systemImage: "trash")
+            }
+        }
+        .confirmationDialog(
+            "Delete this note?",
+            isPresented: $isShowingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Note", role: .destructive) {
+                Task {
+                    await appModel.deleteNote(note)
+                    dismiss()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the note and its generated references from Pensieve.")
         }
     }
 

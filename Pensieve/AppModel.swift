@@ -86,6 +86,11 @@ final class AppModel: ObservableObject {
         chatMessages = await localStore.loadChatMessages()
     }
 
+    func deleteNote(_ note: MemoryNote) async {
+        await localStore.deleteNote(id: note.id)
+        await refresh()
+    }
+
     func saveAnthropicAPIKey(_ apiKey: String) throws {
         try keychain.saveAnthropicAPIKey(apiKey)
         isAnthropicConfigured = keychain.hasAnthropicAPIKey()

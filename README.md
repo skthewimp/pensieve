@@ -9,7 +9,7 @@ calls for note processing, chat, and corpus analysis.
 
 Built and tested on a physical iPhone with bundle id
 `com.karthikshashidhar.pensieve`. Current TestFlight/device build is version
-`0.1`, build `6`.
+`0.1`, build `7`.
 
 ## Quick Start For New Users
 
@@ -80,6 +80,8 @@ Implemented:
 - Generated topic pages link to related insights and contradictions.
 - Single-topic refresh from a generated Wiki topic page.
 - Topic-level review state: pending, useful, stale, needs refresh, dismissed.
+- Note deletion from the Memory notes list and note detail screen, with local
+  cleanup of generated references.
 
 Not yet implemented:
 

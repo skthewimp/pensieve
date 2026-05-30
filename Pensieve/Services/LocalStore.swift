@@ -81,6 +81,7 @@ struct LocalStoreSnapshot: Codable {
 protocol LocalStore {
     func saveCapture(_ capture: Capture) async
     func saveNote(_ note: MemoryNote) async
+    func deleteNote(id: UUID) async
     func saveImported(capture: Capture, note: MemoryNote) async
     func saveContradiction(_ contradiction: Contradiction) async
     func saveInsight(_ insight: Insight) async
@@ -135,6 +136,51 @@ actor FileLocalStore: LocalStore {
     func saveNote(_ note: MemoryNote) {
         upsert(note, into: &snapshot.notes)
         snapshot.notes.sort { $0.createdAt > $1.createdAt }
+        persist()
+    }
+
+    func deleteNote(id: UUID) {
+        guard let note = snapshot.notes.first(where: { $0.id == id }) else { return }
+        snapshot.notes.removeAll { $0.id == id }
+
+        if !snapshot.notes.contains(where: { $0.captureID == note.captureID }) {
+            if let capture = snapshot.captures.first(where: { $0.id == note.captureID }),
+               let audioFilePath = capture.audioFilePath {
+                try? FileManager.default.removeItem(atPath: audioFilePath)
+            }
+            snapshot.captures.removeAll { $0.id == note.captureID }
+        }
+
+        snapshot.contradictions.removeAll { $0.beforeNoteID == id || $0.afterNoteID == id }
+
+        snapshot.insights = snapshot.insights.compactMap { insight in
+            var updated = insight
+            updated.sourceNoteIDs.removeAll { $0 == id }
+            guard !updated.sourceNoteIDs.isEmpty else { return nil }
+            return updated
+        }
+
+        snapshot.wikiTopics = snapshot.wikiTopics.compactMap { topic in
+            var updated = topic
+            updated.sourceNoteIDs.removeAll { $0 == id }
+            guard !updated.sourceNoteIDs.isEmpty else { return nil }
+            return updated
+        }
+        snapshot.wikiTopics.sort { $0.sourceNoteIDs.count > $1.sourceNoteIDs.count }
+
+        snapshot.noteConnections = snapshot.noteConnections.compactMap { connection in
+            var updated = connection
+            updated.sourceNoteIDs.removeAll { $0 == id }
+            guard updated.sourceNoteIDs.count >= 2 else { return nil }
+            return updated
+        }
+
+        snapshot.chatMessages = snapshot.chatMessages.map { message in
+            var updated = message
+            updated.contextNoteIDs.removeAll { $0 == id }
+            return updated
+        }
+
         persist()
     }
 
@@ -301,6 +347,45 @@ actor InMemoryLocalStore: LocalStore {
 
     func saveNote(_ note: MemoryNote) {
         upsert(note, into: &notes)
+    }
+
+    func deleteNote(id: UUID) {
+        guard let note = notes.first(where: { $0.id == id }) else { return }
+        notes.removeAll { $0.id == id }
+
+        if !notes.contains(where: { $0.captureID == note.captureID }) {
+            captures.removeAll { $0.id == note.captureID }
+        }
+
+        contradictions.removeAll { $0.beforeNoteID == id || $0.afterNoteID == id }
+
+        insights = insights.compactMap { insight in
+            var updated = insight
+            updated.sourceNoteIDs.removeAll { $0 == id }
+            guard !updated.sourceNoteIDs.isEmpty else { return nil }
+            return updated
+        }
+
+        wikiTopics = wikiTopics.compactMap { topic in
+            var updated = topic
+            updated.sourceNoteIDs.removeAll { $0 == id }
+            guard !updated.sourceNoteIDs.isEmpty else { return nil }
+            return updated
+        }
+        wikiTopics.sort { $0.sourceNoteIDs.count > $1.sourceNoteIDs.count }
+
+        noteConnections = noteConnections.compactMap { connection in
+            var updated = connection
+            updated.sourceNoteIDs.removeAll { $0 == id }
+            guard updated.sourceNoteIDs.count >= 2 else { return nil }
+            return updated
+        }
+
+        chatMessages = chatMessages.map { message in
+            var updated = message
+            updated.contextNoteIDs.removeAll { $0 == id }
+            return updated
+        }
     }
 
     func saveImported(capture: Capture, note: MemoryNote) {

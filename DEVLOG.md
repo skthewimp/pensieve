@@ -1,5 +1,27 @@
 # Pensieve Dev Log
 
+## 2026-05-30 11:10 IST - note-deletion-testflight
+
+### User prompts
+
+> Currently, we don't have a feature to delete notes. Can you add that and push to TestFlight? Just do the entire end-to-end thing on this one.
+
+### Work done
+
+- Added note deletion to the local store API.
+- Deleting a note now removes its source capture when no other note uses it, deletes linked audio files, drops contradictions tied to the note, prunes generated insights/wiki topics/chat citations, and removes note connections that no longer cite at least two notes.
+- Added swipe-to-delete in Memory -> Notes.
+- Added a destructive trash action with confirmation on note detail pages.
+- Bumped `CFBundleVersion` to `7`.
+- Updated README and TestFlight tester notes for build `0.1 (7)`.
+
+### Verification
+
+- Simulator Debug build passed with `xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Debug -destination 'generic/platform=iOS Simulator' build`.
+- `git diff --check` passed.
+- Release archive passed with `xcodebuild -project Pensieve.xcodeproj -scheme Pensieve -configuration Release -destination generic/platform=iOS -archivePath build/Pensieve-7.xcarchive -allowProvisioningUpdates archive`.
+- App Store Connect upload passed with `xcodebuild -exportArchive -archivePath build/Pensieve-7.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/AppStoreUpload7 -allowProvisioningUpdates`; Xcode reported `Uploaded package is processing` and `Upload succeeded` for build `0.1 (7)`.
+
 ## 2026-05-27 10:25 IST - testflight-build-6-prep
 
 ### User prompts
