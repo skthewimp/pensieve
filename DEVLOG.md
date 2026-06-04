@@ -640,3 +640,17 @@ Result: build succeeded.
 - Add URL fetching/readability extraction.
 - Replace placeholder `AnthropicProvider` with the real Claude API implementation.
 - Add local retrieval for chat.
+
+<!-- codex-session:019e775d-7a8a-75f2-898d-3bf5d5f5dda4:start -->
+## 2026-05-30 11:01 IST | Codex session `019e775d-7a8`
+
+### User prompts
+> Currently, we don't have a feature to delete notes. Can you add that and push to TestFlight? Just do the entire end-to-end thing on this one.
+> all tested? and update git as well. as a rule
+> can you update my phone also?
+
+### Work done
+- App Store Connect analytics is worth using as the baseline, but it won’t answer your specific product questions well. It gives you things like: - downloads / first-time downloads - app units - active devices / session...
+- Yes. - Working tree is clean. - `main` is up to date with `origin/main`. - Latest commit is `0934799 feat: add note deletion`. - The note deletion work, build `0.1 (7)`, TestFlight upload, and docs/DEVLOG updates are...
+
+<!-- codex-session:019e775d-7a8a-75f2-898d-3bf5d5f5dda4:end -->
