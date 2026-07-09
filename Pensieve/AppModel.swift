@@ -1,6 +1,14 @@
 import Foundation
 import Combine
 
+enum RootTab: Hashable {
+    case capture
+    case memory
+    case chat
+    case review
+    case settings
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var captures: [Capture] = []
@@ -18,6 +26,7 @@ final class AppModel: ObservableObject {
     @Published var isSarvamConfigured: Bool
     @Published var selectedLLMProvider: LLMProviderKind
     @Published var selectedTranscriptionProvider: TranscriptionProviderKind
+    @Published var selectedRootTab: RootTab = .capture
 
     let audioRecorder = AudioRecorderService()
     let transcriptionService: TranscriptionService
@@ -72,6 +81,24 @@ final class AppModel: ObservableObject {
         Task {
             await refresh()
             await runPeriodicBacklinkMaintenanceIfNeeded()
+        }
+    }
+
+
+    func handleDeepLink(_ url: URL) {
+        guard url.scheme?.lowercased() == "karthik-pensieve" else { return }
+
+        let target = [url.host, url.path]
+            .compactMap { $0 }
+            .joined(separator: "/")
+            .lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        switch target {
+        case "capture", "new-note", "newnote", "note":
+            selectedRootTab = .capture
+        default:
+            selectedRootTab = .capture
         }
     }
 

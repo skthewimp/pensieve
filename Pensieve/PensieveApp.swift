@@ -8,6 +8,9 @@ struct PensieveApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(appModel)
+                .onOpenURL { url in
+                    appModel.handleDeepLink(url)
+                }
         }
     }
 }

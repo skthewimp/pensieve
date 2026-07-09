@@ -653,7 +653,7 @@ struct OpenAIProvider: LLMProvider {
 
 struct AnthropicProvider: LLMProvider {
     private let keychain: KeychainService
-    private let model = "claude-sonnet-4-20250514"
+    private let model = "claude-opus-4-8"
     private let baseURL = URL(string: "https://api.anthropic.com/v1/messages")!
 
     init(keychain: KeychainService) {

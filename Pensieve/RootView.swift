@@ -1,32 +1,39 @@
 import SwiftUI
 
 struct RootView: View {
+    @EnvironmentObject private var appModel: AppModel
+
     var body: some View {
-        TabView {
+        TabView(selection: $appModel.selectedRootTab) {
             CaptureView()
                 .tabItem {
                     Label("Capture", systemImage: "mic.circle")
                 }
+                .tag(RootTab.capture)
 
             MemoryHubView()
                 .tabItem {
                     Label("Memory", systemImage: "books.vertical")
                 }
+                .tag(RootTab.memory)
 
             ChatView()
                 .tabItem {
                     Label("Chat", systemImage: "bubble.left.and.bubble.right")
                 }
+                .tag(RootTab.chat)
 
             ReviewHubView()
                 .tabItem {
                     Label("Review", systemImage: "checklist")
                 }
+                .tag(RootTab.review)
 
             SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")
                 }
+                .tag(RootTab.settings)
         }
     }
 }
